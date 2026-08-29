@@ -66,7 +66,7 @@ export default function VerifyOTPPage() {
 
           <button
             type="submit"
-            disabled={verifyOTP.isPending || otp.length !== 6}
+            disabled={verifyOTP.isPending || otp.length < 4}
             className="w-full bg-adansi-primary text-adansi-secondary font-bold py-4 rounded-xl disabled:opacity-50 active:scale-[0.98] transition-transform flex items-center justify-center gap-2"
           >
             {verifyOTP.isPending ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Verify'}

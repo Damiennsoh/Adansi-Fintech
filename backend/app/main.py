@@ -46,10 +46,11 @@ app.add_middleware(
         settings.frontend_url,
         "http://localhost:3000",
         "http://localhost:5173",
+        "https://adansi-fintech.vercel.app",
         "https://adansi.app"
     ],
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_methods=["*"],
     allow_headers=["*"],
     max_age=600
 )

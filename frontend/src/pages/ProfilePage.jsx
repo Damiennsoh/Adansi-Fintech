@@ -14,6 +14,7 @@ export default function ProfilePage() {
   }
 
   const menuItems = [
+    { icon: Shield, label: 'Admin Dashboard', desc: 'Platform overview & agent management', action: () => navigate('/admin') },
     { icon: CreditCard, label: 'My Ghana Card', desc: 'Verify your identity', action: () => {} },
     { icon: Bell, label: 'Notifications', desc: 'Push & SMS preferences', action: () => {} },
     { icon: Shield, label: 'Security', desc: 'Change PIN, 2FA', action: () => {} },
