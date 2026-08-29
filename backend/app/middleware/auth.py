@@ -46,7 +46,7 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
         # Fetch user from database
         async with AsyncSessionLocal() as session:
             result = await session.execute(
-                select(User).where(User.id == UUID(user_id))
+                select(User).where(User.auth_user_id == UUID(user_id))
             )
             user = result.scalar_one_or_none()
 

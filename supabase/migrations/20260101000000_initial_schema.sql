@@ -7,6 +7,7 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 -- 1. Users Table
 CREATE TABLE IF NOT EXISTS users (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    auth_user_id UUID UNIQUE REFERENCES auth.users(id) ON DELETE CASCADE,
     phone VARCHAR(15) UNIQUE NOT NULL,
     ghana_card_number VARCHAR(20) UNIQUE,
     ghana_card_image_url VARCHAR(500),
@@ -226,3 +227,52 @@ CREATE TABLE IF NOT EXISTS ussd_sessions (
 );
 CREATE INDEX IF NOT EXISTS idx_ussd_session ON ussd_sessions(session_id);
 CREATE INDEX IF NOT EXISTS idx_ussd_phone ON ussd_sessions(phone);
+
+-- Supabase Auth ownership and safe client access
+ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE groups ENABLE ROW LEVEL SECURITY;
+ALTER TABLE group_members ENABLE ROW LEVEL SECURITY;
+ALTER TABLE contributions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE transactions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE withdrawals ENABLE ROW LEVEL SECURITY;
+ALTER TABLE withdrawal_approvals ENABLE ROW LEVEL SECURITY;
+ALTER TABLE credit_profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE loans ENABLE ROW LEVEL SECURITY;
+ALTER TABLE agent_verifications ENABLE ROW LEVEL SECURITY;
+ALTER TABLE insurance_policies ENABLE ROW LEVEL SECURITY;
+ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ussd_sessions ENABLE ROW LEVEL SECURITY;
+
+CREATE INDEX IF NOT EXISTS idx_users_auth_user_id ON users(auth_user_id);
+
+DROP POLICY IF EXISTS users_select_own ON users;
+CREATE POLICY users_select_own ON users FOR SELECT TO authenticated
+  USING (auth_user_id = (SELECT auth.uid()));
+DROP POLICY IF EXISTS users_insert_own ON users;
+CREATE POLICY users_insert_own ON users FOR INSERT TO authenticated
+  WITH CHECK (auth_user_id = (SELECT auth.uid()));
+DROP POLICY IF EXISTS users_update_own ON users;
+CREATE POLICY users_update_own ON users FOR UPDATE TO authenticated
+  USING (auth_user_id = (SELECT auth.uid()))
+  WITH CHECK (auth_user_id = (SELECT auth.uid()));
+
+CREATE OR REPLACE FUNCTION public.handle_new_auth_user()
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  INSERT INTO public.users (id, auth_user_id, phone, full_name, is_verified)
+  VALUES (
+    new.id,
+    new.id,
+    COALESCE(new.phone, new.email, new.id::text),
+    COALESCE(new.raw_user_meta_data->>'full_name', ''),
+    TRUE
+  )
+  ON CONFLICT (id) DO UPDATE SET auth_user_id = EXCLUDED.auth_user_id;
+  RETURN new;
+END;
+$$;
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION public.handle_new_auth_user();
+
