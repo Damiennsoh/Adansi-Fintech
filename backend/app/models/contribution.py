@@ -18,7 +18,7 @@ class Contribution(Base):
     transaction_ref = Column(String(100), unique=True, nullable=True)
     status = Column(String(20), default="pending")  # pending, completed, failed, refunded
     momo_transaction_id = Column(String(100), nullable=True)
-    metadata = Column(JSON, default=dict)  # extra data like diaspora sender info
+    meta_data = Column("metadata", JSON, default=dict)  # extra data like diaspora sender info
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
 
     # Relationships
@@ -45,7 +45,7 @@ class Transaction(Base):
     target_user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
     status = Column(String(20), default="pending")
     external_ref = Column(String(100), nullable=True)
-    metadata = Column(JSON, default=dict)
+    meta_data = Column("metadata", JSON, default=dict)
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
 
     __table_args__ = (

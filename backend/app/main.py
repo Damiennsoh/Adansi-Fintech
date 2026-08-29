@@ -21,7 +21,10 @@ async def lifespan(app: FastAPI):
     """Application lifespan: startup and shutdown events."""
     # Startup
     if settings.debug:
-        await init_db()  # Create tables in dev (use Alembic in production)
+        try:
+            await init_db()  # Create tables in dev (use Alembic in production)
+        except Exception as e:
+            print(f"Database connection warning: {e}. FastAPI server running.")
     yield
     # Shutdown
     # Cleanup connections if needed

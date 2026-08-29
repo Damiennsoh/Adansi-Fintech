@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
+import { useAuthStore } from '../store/authStore'
 import { Phone, Loader2 } from 'lucide-react'
 
 export default function LoginPage() {
@@ -33,6 +34,21 @@ export default function LoginPage() {
     } catch (err) {
       alert('Invalid PIN. Please try again.')
     }
+  }
+
+  const handleDemoLogin = () => {
+    const { setUser, setTokens } = useAuthStore.getState()
+    setUser({
+      id: 'demo-user-123',
+      phone: '+233240000000',
+      full_name: 'Damien Nsoh (Demo User)',
+      credit_score: 720,
+      total_contributed: 1500.00,
+      groups_count: 3,
+      is_verified: true
+    })
+    setTokens('demo-access-token-xyz', 'demo-refresh-token-xyz')
+    navigate('/dashboard')
   }
 
   return (
@@ -110,6 +126,16 @@ export default function LoginPage() {
             </button>
           </form>
         )}
+
+        <div className="mt-8 pt-6 border-t border-white/10 text-center">
+          <button
+            type="button"
+            onClick={handleDemoLogin}
+            className="w-full bg-white/5 hover:bg-white/10 border border-white/20 text-adansi-primary font-medium py-3 rounded-xl transition-all flex items-center justify-center gap-2 text-sm"
+          >
+            ⚡ Quick Demo Access (Explore All UI Features)
+          </button>
+        </div>
       </div>
     </div>
   )
