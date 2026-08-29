@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { supabase } from './supabase'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1'
 
@@ -11,9 +12,11 @@ export const api = axios.create({
 })
 
 api.interceptors.request.use(
-  (config) => {
-    const token = localStorage.getItem('adansi_access_token')
+  async (config) => {
+    const { data } = supabase ? await supabase.auth.getSession() : { data: { session: null } }
+    const token = data.session?.access_token || localStorage.getItem('adansi_access_token')
     if (token) {
+      config.headers = config.headers || {}
       config.headers.Authorization = `Bearer ${token}`
     }
     return config
