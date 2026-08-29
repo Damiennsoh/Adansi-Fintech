@@ -1,0 +1,29 @@
+# Environment variables
+.env
+*.env
+!.env.example
+!backend.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+env/
+ENV/
+*.sqlite3
+
+# Node / Frontend
+node_modules/
+dist/
+build/
+.output/
+.vite/
+*.log
+
+# IDEs & OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

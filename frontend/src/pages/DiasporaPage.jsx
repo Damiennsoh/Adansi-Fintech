@@ -1,0 +1,255 @@
+import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { 
+  Globe, ArrowLeft, Search, CreditCard, TrendingUp, 
+  CheckCircle2, Loader2, AlertCircle, Clock
+} from 'lucide-react'
+import { formatCurrency } from '../lib/utils'
+
+const exchangeRates = {
+  USD: { rate: 15.5, flag: '🇺🇸' },
+  GBP: { rate: 19.8, flag: '🇬🇧' },
+  EUR: { rate: 16.9, flag: '🇪🇺' },
+  CAD: { rate: 11.4, flag: '🇨🇦' },
+}
+
+const mockGroups = [
+  { id: 1, name: 'Uncle Kofi Funeral Fund', code: 'FNRL01', type: 'funeral', balance: 12500, target: 20000, members: 45 },
+  { id: 2, name: 'Ama Wedding Support', code: 'WEDG02', type: 'wedding', balance: 8400, target: 15000, members: 32 },
+]
+
+export default function DiasporaPage() {
+  const navigate = useNavigate()
+  const [step, setStep] = useState('select') // select | amount | payment | success
+  const [selectedGroup, setSelectedGroup] = useState(null)
+  const [amountGHS, setAmountGHS] = useState('')
+  const [currency, setCurrency] = useState('USD')
+  const [searchCode, setSearchCode] = useState('')
+  const [foundGroup, setFoundGroup] = useState(null)
+
+  const rate = exchangeRates[currency].rate
+  const foreignAmount = amountGHS ? (parseFloat(amountGHS) / rate).toFixed(2) : '0.00'
+  const fee = amountGHS ? (parseFloat(amountGHS) * 0.01).toFixed(2) : '0.00'
+  const total = amountGHS ? (parseFloat(amountGHS) + parseFloat(fee)).toFixed(2) : '0.00'
+
+  const handleSearch = () => {
+    const group = mockGroups.find(g => g.code.toLowerCase() === searchCode.toLowerCase())
+    setFoundGroup(group || null)
+  }
+
+  const handleContribute = () => {
+    setStep('payment')
+    setTimeout(() => setStep('success'), 2500)
+  }
+
+  if (step === 'success') {
+    return (
+      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center px-6">
+        <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mb-4">
+          <CheckCircle2 className="w-10 h-10 text-green-600" />
+        </div>
+        <h2 className="text-xl font-bold text-gray-900 mb-2">Contribution Sent!</h2>
+        <p className="text-gray-500 text-center mb-6">
+          {exchangeRates[currency].flag} {foreignAmount} {currency} → GHS {amountGHS}
+        </p>
+        <p className="text-sm text-gray-400 text-center">
+          Your family will receive an SMS confirmation.
+        </p>
+        <button 
+          onClick={() => { setStep('select'); setAmountGHS(''); setFoundGroup(null); setSearchCode('') }}
+          className="mt-8 px-6 py-3 bg-adansi-primary text-adansi-secondary font-bold rounded-xl"
+        >
+          Send Another
+        </button>
+      </div>
+    )
+  }
+
+  if (step === 'payment') {
+    return (
+      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center px-6">
+        <div className="w-16 h-16 border-4 border-adansi-primary border-t-transparent rounded-full animate-spin mb-4" />
+        <h2 className="text-lg font-bold text-gray-900 mb-2">Processing Payment...</h2>
+        <p className="text-gray-500 text-center text-sm">Please do not close this window</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50 pb-20">
+      <div className="bg-adansi-secondary px-5 pt-8 pb-6">
+        <div className="flex items-center gap-3 mb-4">
+          <button onClick={() => navigate(-1)} className="p-2 bg-white/10 rounded-full">
+            <ArrowLeft className="w-5 h-5 text-white" />
+          </button>
+          <div>
+            <h1 className="text-xl font-bold text-white">Diaspora Bridge</h1>
+            <p className="text-gray-400 text-xs">Send money home from anywhere</p>
+          </div>
+        </div>
+
+        {/* Exchange Rate Ticker */}
+        <div className="flex gap-3 overflow-x-auto scrollbar-hide pb-1">
+          {Object.entries(exchangeRates).map(([curr, data]) => (
+            <button
+              key={curr}
+              onClick={() => setCurrency(curr)}
+              className={`flex-shrink-0 px-3 py-2 rounded-xl text-sm font-medium transition-colors ${
+                currency === curr ? 'bg-adansi-primary text-adansi-secondary' : 'bg-white/10 text-white'
+              }`}
+            >
+              <span className="mr-1">{data.flag}</span>
+              1 {curr} = GHS {data.rate}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="px-5 py-6 space-y-6">
+        {step === 'select' && (
+          <>
+            {/* Search by Code */}
+            <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
+              <label className="block text-sm font-medium text-gray-700 mb-2">Find Group by Code</label>
+              <div className="relative">
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                <input
+                  type="text"
+                  value={searchCode}
+                  onChange={(e) => { setSearchCode(e.target.value.toUpperCase()); setFoundGroup(null) }}
+                  placeholder="e.g. FNRL01"
+                  className="w-full pl-12 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm font-mono uppercase focus:outline-none focus:border-adansi-primary"
+                />
+              </div>
+              <button
+                onClick={handleSearch}
+                className="w-full mt-3 bg-adansi-secondary text-white font-semibold py-3 rounded-xl text-sm active:scale-[0.98] transition-transform"
+              >
+                Find Group
+              </button>
+
+              {foundGroup === null && searchCode.length >= 4 && (
+                <p className="text-red-500 text-xs mt-2 text-center">Group not found. Check the code and try again.</p>
+              )}
+
+              {foundGroup && (
+                <div className="mt-4 p-4 bg-green-50 rounded-xl border border-green-100">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-purple-500 rounded-lg flex items-center justify-center text-white font-bold">
+                      {foundGroup.name.charAt(0)}
+                    </div>
+                    <div className="flex-1">
+                      <p className="font-semibold text-gray-900 text-sm">{foundGroup.name}</p>
+                      <p className="text-xs text-gray-500">{foundGroup.members} members • {formatCurrency(foundGroup.balance)} raised</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => { setSelectedGroup(foundGroup); setStep('amount') }}
+                    className="w-full mt-3 bg-adansi-primary text-adansi-secondary font-bold py-2.5 rounded-xl text-sm"
+                  >
+                    Contribute to This Group
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Popular Groups */}
+            <div>
+              <h3 className="font-bold text-gray-900 mb-3">Popular Groups</h3>
+              <div className="space-y-3">
+                {mockGroups.map(group => (
+                  <button
+                    key={group.id}
+                    onClick={() => { setSelectedGroup(group); setStep('amount') }}
+                    className="w-full bg-white rounded-2xl p-4 shadow-sm border border-gray-100 text-left active:scale-[0.98] transition-transform"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-purple-500 rounded-lg flex items-center justify-center text-white font-bold">
+                        {group.name.charAt(0)}
+                      </div>
+                      <div className="flex-1">
+                        <p className="font-semibold text-gray-900 text-sm">{group.name}</p>
+                        <p className="text-xs text-gray-500">{group.members} members</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-sm font-bold text-gray-900">{formatCurrency(group.balance)}</p>
+                        <p className="text-[10px] text-gray-400">of {formatCurrency(group.target)}</p>
+                      </div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </>
+        )}
+
+        {step === 'amount' && selectedGroup && (
+          <div className="space-y-6">
+            <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
+              <p className="text-sm text-gray-500 mb-1">Contributing to</p>
+              <p className="font-bold text-gray-900">{selectedGroup.name}</p>
+            </div>
+
+            <div className="text-center">
+              <p className="text-gray-500 text-sm mb-2">Enter Amount in GHS</p>
+              <div className="flex items-center justify-center gap-1">
+                <span className="text-2xl text-gray-400">GHS</span>
+                <input
+                  type="number"
+                  value={amountGHS}
+                  onChange={(e) => setAmountGHS(e.target.value)}
+                  placeholder="0.00"
+                  className="text-5xl font-bold text-center w-48 bg-transparent focus:outline-none text-gray-900"
+                  autoFocus
+                />
+              </div>
+              {amountGHS && (
+                <p className="text-sm text-gray-500 mt-2">
+                  {exchangeRates[currency].flag} {foreignAmount} {currency} at rate {rate}
+                </p>
+              )}
+            </div>
+
+            <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 space-y-3">
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-500">Amount</span>
+                <span className="font-medium">GHS {amountGHS || '0.00'}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-500">Service Fee (1%)</span>
+                <span className="font-medium">GHS {fee}</span>
+              </div>
+              <div className="border-t border-gray-100 pt-3 flex justify-between">
+                <span className="font-bold text-gray-900">Total</span>
+                <span className="font-bold text-gray-900">GHS {total}</span>
+              </div>
+            </div>
+
+            <div className="bg-blue-50 rounded-xl p-4 flex items-start gap-3">
+              <CreditCard className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="text-sm font-medium text-blue-900">Secure Card Payment</p>
+                <p className="text-xs text-blue-700 mt-1">Pay with Visa, Mastercard, or PayPal. Funds settle directly into the group MoMo wallet.</p>
+              </div>
+            </div>
+
+            <button
+              onClick={handleContribute}
+              disabled={!amountGHS || parseFloat(amountGHS) <= 0}
+              className="w-full bg-adansi-primary text-adansi-secondary font-bold py-4 rounded-xl disabled:opacity-50 active:scale-[0.98] transition-transform flex items-center justify-center gap-2"
+            >
+              Pay {exchangeRates[currency].flag} {foreignAmount} {currency}
+            </button>
+
+            <button
+              onClick={() => setStep('select')}
+              className="w-full text-gray-500 text-sm py-2"
+            >
+              Choose Different Group
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
