@@ -19,10 +19,25 @@ export function useAuth() {
     mutationFn: async ({ phone, otp, pin }) => {
       const { session } = await verifyPhoneOTP(phone, otp)
 
-      const { data: userData } = await api.get('/users/me')
-      setUser(userData)
-      setTokens(session.access_token, session.refresh_token)
-      return userData
+      if (session?.access_token) {
+        setTokens(session.access_token, session.refresh_token)
+      }
+
+      try {
+        const { data: userData } = await api.get('/users/me')
+        setUser(userData)
+        return userData
+      } catch (err) {
+        // Fallback for new users before backend profile creation
+        const tempUser = {
+          id: session?.user?.id || 'temp-user',
+          phone,
+          full_name: session?.user?.user_metadata?.full_name || 'Member',
+          is_verified: true
+        }
+        setUser(tempUser)
+        return tempUser
+      }
     },
   })
 

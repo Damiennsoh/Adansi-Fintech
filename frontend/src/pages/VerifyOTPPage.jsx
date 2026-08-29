@@ -27,7 +27,7 @@ export default function VerifyOTPPage() {
         navigate('/dashboard')
       }
     } catch (err) {
-      alert('Invalid OTP. Please try again.')
+      alert(err.message || 'OTP verification failed. Please check the code and try again.')
     }
   }
 
