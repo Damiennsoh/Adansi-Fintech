@@ -19,7 +19,7 @@ export default function LoginPage() {
       await sendOTP.mutateAsync(`+233${phone.replace(/^0/, '')}`)
       navigate('/verify-otp', { state: { phone: `+233${phone.replace(/^0/, '')}` } })
     } catch (err) {
-      alert('Failed to send OTP. Please try again.')
+      alert(err.message || 'Failed to send OTP. Please try again.')
     }
   }
 
