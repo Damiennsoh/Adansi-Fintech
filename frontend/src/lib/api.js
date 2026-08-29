@@ -30,13 +30,18 @@ api.interceptors.response.use(
       originalRequest._retry = true
       try {
         const refreshToken = localStorage.getItem('adansi_refresh_token')
+        if (!refreshToken) throw new Error('No refresh token available')
+
         const { data } = await axios.post(`${API_URL}/auth/refresh`, {
           refresh_token: refreshToken,
         })
 
-        localStorage.setItem('adansi_access_token', data.access_token)
-        api.defaults.headers.common['Authorization'] = `Bearer ${data.access_token}`
-        originalRequest.headers['Authorization'] = `Bearer ${data.access_token}`
+        const nextAccessToken = data.access_token || data.session?.access_token
+        if (!nextAccessToken) throw new Error('Refresh response did not include an access token')
+
+        localStorage.setItem('adansi_access_token', nextAccessToken)
+        api.defaults.headers.common['Authorization'] = `Bearer ${nextAccessToken}`
+        originalRequest.headers['Authorization'] = `Bearer ${nextAccessToken}`
 
         return api(originalRequest)
       } catch (refreshError) {

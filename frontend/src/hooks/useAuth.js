@@ -19,10 +19,6 @@ export function useAuth() {
     mutationFn: async ({ phone, otp, pin }) => {
       const { session } = await verifyPhoneOTP(phone, otp)
 
-      if (pin) {
-        await api.post('/auth/setup-pin', { pin, phone })
-      }
-
       const { data: userData } = await api.get('/users/me')
       setUser(userData)
       setTokens(session.access_token, session.refresh_token)
