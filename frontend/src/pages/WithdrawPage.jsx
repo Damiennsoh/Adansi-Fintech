@@ -29,11 +29,13 @@ export default function WithdrawPage() {
   if (step === 'success') {
     return (
       <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center px-6">
-        <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mb-4">
-          <CheckCircle2 className="w-10 h-10 text-green-600" />
+        <div className="w-20 h-20 bg-adansi-primary/20 rounded-full flex items-center justify-center mb-4">
+          <CheckCircle2 className="w-10 h-10 text-adansi-secondary" />
         </div>
-        <h2 className="text-xl font-bold text-gray-900 mb-2">Request Sent!</h2>
-        <p className="text-gray-500 text-center">Group members will be notified to approve.</p>
+        <h2 className="text-xl font-bold text-gray-900 mb-2">Withdrawal Requested!</h2>
+        <p className="text-gray-500 text-center text-sm max-w-xs">
+          Treasury signatories have been notified. Once the required digital signatures are collected, funds will be disbursed via MTN MoMo instantly.
+        </p>
       </div>
     )
   }
@@ -86,12 +88,20 @@ export default function WithdrawPage() {
           />
         </div>
 
-        <div className="bg-yellow-50 rounded-xl p-4 flex items-start gap-3">
-          <AlertTriangle className="w-5 h-5 text-yellow-600 mt-0.5 flex-shrink-0" />
+        <div className="bg-adansi-secondary/10 border border-adansi-primary/30 rounded-xl p-4 flex items-start gap-3">
+          <AlertTriangle className="w-5 h-5 text-adansi-secondary mt-0.5 flex-shrink-0" />
           <div>
-            <p className="text-sm font-medium text-yellow-900">Approval Required</p>
-            <p className="text-xs text-yellow-700 mt-1">
-              All group members must approve this withdrawal before funds are released. Large withdrawals (&gt;GHS 500) require agent verification.
+            <p className="text-sm font-bold text-adansi-secondary">Digital Treasury Rule Active</p>
+            <p className="text-xs text-gray-700 mt-1">
+              Rule: <span className="font-semibold">{
+                group?.approval_rule === 'two_of_three_treasurers' ? '2 of 3 Treasurers must sign' :
+                group?.approval_rule === 'majority_members' ? 'Majority (51%) of members' :
+                group?.approval_rule === 'unanimous_members' ? 'All members must approve' :
+                'Any 1 Treasurer can approve'
+              }</span>
+              {group?.auto_approve_limit > 0 && parseFloat(amount) <= group.auto_approve_limit
+                ? <span className="ml-1 text-green-700 font-semibold">• Under auto-approve limit — will disburse instantly</span>
+                : <span> • Approval required before disbursement.</span>}
             </p>
           </div>
         </div>

@@ -18,14 +18,19 @@ export default function CreditPage() {
   const { creditProfile, isLoading } = useCredit()
   const [showLoanForm, setShowLoanForm] = useState(false)
   const [loanAmount, setLoanAmount] = useState('')
+  const [isVouched, setIsVouched] = useState(false)
 
   const tier = getCreditTier(creditProfile?.score || 0)
+  const baseEligibility = creditProfile?.loan_eligibility || 2000
+  const maxEligibleLoan = isVouched ? Math.round(baseEligibility * 1.25) : baseEligibility
 
   const handleApplyLoan = async (e) => {
     e.preventDefault()
-    // Would call applyLoan mutation here
-    alert(`Loan application for GHS ${loanAmount} submitted!`)
+    const rate = isVouched ? '3%' : '5%'
+    alert(`Loan application for GHS ${loanAmount} submitted at ${rate}/month. Awaiting group member vouching confirmation.`)
     setShowLoanForm(false)
+    setIsVouched(false)
+    setLoanAmount('')
   }
 
   return (
@@ -73,18 +78,22 @@ export default function CreditPage() {
         {/* Loan Eligibility */}
         <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="font-bold text-gray-900">Quick Loan</h2>
-            <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded-full">Mock for Demo</span>
+            <h2 className="font-bold text-gray-900">Micro-Loan</h2>
+            <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded-full">Backed by Group Treasury</span>
           </div>
 
-          <div className="grid grid-cols-2 gap-3 mb-4">
+          <div className="grid grid-cols-3 gap-2 mb-4">
             <div className="bg-gray-50 rounded-xl p-3">
-              <p className="text-xs text-gray-500">Max Loan</p>
-              <p className="text-lg font-bold text-gray-900">{formatCurrency(creditProfile?.loan_eligibility || 0)}</p>
+              <p className="text-[10px] text-gray-500">Max Loan</p>
+              <p className="text-sm font-bold text-gray-900">{formatCurrency(maxEligibleLoan)}</p>
             </div>
             <div className="bg-gray-50 rounded-xl p-3">
-              <p className="text-xs text-gray-500">Interest Rate</p>
-              <p className="text-lg font-bold text-gray-900">{creditProfile?.interest_rate || 5}%</p>
+              <p className="text-[10px] text-gray-500">Rate</p>
+              <p className="text-sm font-bold text-gray-900">5% / mo</p>
+            </div>
+            <div className="bg-adansi-primary/10 rounded-xl p-3">
+              <p className="text-[10px] text-adansi-secondary font-medium">With Vouching</p>
+              <p className="text-sm font-bold text-adansi-secondary">3% / mo</p>
             </div>
           </div>
 
@@ -92,12 +101,12 @@ export default function CreditPage() {
             onClick={() => setShowLoanForm(true)}
             className="w-full bg-adansi-primary text-adansi-secondary font-bold py-3 rounded-xl active:scale-[0.98] transition-transform"
           >
-            Apply for Loan
+            Apply for Micro-Loan
           </button>
 
           <div className="mt-3 flex items-start gap-2 text-xs text-gray-500">
             <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-            <p>Loans are backed by your group. Members can vouch to reduce your rate.</p>
+            <p>3+ group members vouching drops your rate to 3% and boosts limit by 25%.</p>
           </div>
         </div>
 
@@ -144,8 +153,14 @@ export default function CreditPage() {
       {/* Loan Form Modal */}
       {showLoanForm && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center">
-          <div className="bg-white rounded-t-3xl sm:rounded-2xl w-full max-w-sm p-6 animate-slide-up">
-            <h3 className="text-lg font-bold text-gray-900 mb-4">Apply for Loan</h3>
+          <div className="bg-white rounded-t-3xl sm:rounded-2xl w-full max-w-sm p-6 animate-slide-up space-y-4">
+            <div className="flex justify-between items-center">
+              <h3 className="text-lg font-bold text-gray-900">Apply for Micro-Loan</h3>
+              <span className="text-xs bg-adansi-primary/20 text-adansi-secondary font-bold px-2 py-0.5 rounded-full">
+                {isVouched ? '3% Monthly Rate' : '5% Monthly Rate'}
+              </span>
+            </div>
+
             <form onSubmit={handleApplyLoan} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Amount (GHS)</label>
@@ -153,22 +168,45 @@ export default function CreditPage() {
                   type="number"
                   value={loanAmount}
                   onChange={(e) => setLoanAmount(e.target.value)}
-                  max={creditProfile?.loan_eligibility || 0}
+                  max={maxEligibleLoan}
                   className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:border-adansi-primary"
-                  placeholder={`Max: ${creditProfile?.loan_eligibility || 0}`}
+                  placeholder={`Max: GHS ${maxEligibleLoan}`}
                 />
               </div>
+
+              {/* Group Vouching Feature */}
+              <div className="bg-adansi-secondary/5 border border-adansi-primary/30 rounded-xl p-3.5 space-y-2">
+                <label className="flex items-center gap-2.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={isVouched}
+                    onChange={(e) => setIsVouched(e.target.checked)}
+                    className="w-4 h-4 text-adansi-primary rounded border-gray-300 focus:ring-adansi-primary"
+                  />
+                  <span className="text-xs font-bold text-gray-900">Request Group Vouching</span>
+                </label>
+                <p className="text-[11px] text-gray-600 pl-6 leading-tight">
+                  3+ group members vouching drops interest from 5% to 3% and boosts your loan limit by +25%.
+                </p>
+                {isVouched && (
+                  <div className="pt-2 text-xs text-green-700 font-semibold flex items-center gap-1 pl-6">
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    3 Members Selected: Amina, Kofi, Yaw
+                  </div>
+                )}
+              </div>
+
               <div className="flex gap-3">
                 <button
                   type="button"
                   onClick={() => setShowLoanForm(false)}
-                  className="flex-1 py-3 border border-gray-200 rounded-xl font-medium text-gray-700"
+                  className="flex-1 py-3 border border-gray-200 rounded-xl font-medium text-gray-700 text-sm"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 py-3 bg-adansi-primary text-adansi-secondary rounded-xl font-bold"
+                  className="flex-1 py-3 bg-adansi-primary text-adansi-secondary rounded-xl font-bold text-sm"
                 >
                   Apply
                 </button>

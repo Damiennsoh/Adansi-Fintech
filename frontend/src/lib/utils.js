@@ -47,6 +47,9 @@ export function getGroupColor(type) {
     health: 'bg-adansi-health',
     savings: 'bg-adansi-savings',
     investment: 'bg-adansi-investment',
+    business: 'bg-emerald-700',
+    susu: 'bg-adansi-savings',
+    welfare: 'bg-purple-700',
   };
   return colors[type] || 'bg-gray-500';
 }
