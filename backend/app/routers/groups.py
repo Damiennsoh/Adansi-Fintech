@@ -36,7 +36,9 @@ async def create_group(
         agent_verification_required=request.agent_verification_required,
         contribution_frequency=request.contribution_frequency,
         contribution_amount=request.contribution_amount,
-        created_by=current_user.id
+        created_by=current_user.id,
+        approval_rule=request.approval_rule,
+        approval_timeout_hours=request.approval_timeout_hours
     )
     return group
 

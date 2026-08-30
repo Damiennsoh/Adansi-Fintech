@@ -10,7 +10,7 @@ from app.database import init_db
 from app.routers import (
     auth_router, users_router, groups_router,
     contributions_router, withdrawals_router, credit_router,
-    agents_router, ussd_router, whatsapp_router, momo_router, rates_router
+    agents_router, ussd_router, whatsapp_router, momo_router, rates_router, admin_router
 )
 
 settings = get_settings()
@@ -66,6 +66,7 @@ app.include_router(ussd_router, prefix="/api/v1")
 app.include_router(whatsapp_router, prefix="/api/v1")
 app.include_router(momo_router, prefix="/api/v1")
 app.include_router(rates_router, prefix="/api/v1")
+app.include_router(admin_router, prefix="/api/v1")
 
 
 @app.get("/")

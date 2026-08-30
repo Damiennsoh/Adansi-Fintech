@@ -28,7 +28,9 @@ class GroupService:
         agent_verification_required: bool,
         contribution_frequency: Optional[str],
         contribution_amount: Optional[float],
-        created_by: UUID
+        created_by: UUID,
+        approval_rule: str = "any_1_treasurer",
+        approval_timeout_hours: int = 24
     ) -> Group:
         """Create a new group with auto-generated code."""
         async with AsyncSessionLocal() as session:
@@ -47,7 +49,9 @@ class GroupService:
                 withdrawal_threshold=withdrawal_threshold,
                 agent_verification_required=agent_verification_required,
                 contribution_frequency=contribution_frequency,
-                contribution_amount=contribution_amount
+                contribution_amount=contribution_amount,
+                approval_rule=approval_rule,
+                approval_timeout_hours=approval_timeout_hours
             )
             session.add(group)
             await session.flush()  # Get group.id

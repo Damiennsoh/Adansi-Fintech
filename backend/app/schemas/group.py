@@ -15,6 +15,8 @@ class GroupCreateRequest(BaseModel):
     agent_verification_required: bool = True
     contribution_frequency: Optional[str] = Field(None, pattern=r"^(daily|weekly|monthly|adhoc)$")
     contribution_amount: Optional[Decimal] = Field(None, ge=0)
+    approval_rule: str = Field(default="any_1_treasurer", pattern=r"^(any_1_treasurer|2_of_3|majority|unanimous)$")
+    approval_timeout_hours: int = Field(default=24, ge=1, le=168)
 
 
 class GroupMemberResponse(BaseModel):

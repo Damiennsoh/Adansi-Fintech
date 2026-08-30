@@ -9,7 +9,7 @@ import USSDModal from '../components/USSDModal'
 export default function GroupDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const { group, transactions, auditEvents, members, isLoading } = useGroupDetail(id)
+  const { group, transactions, auditEvents, joinRequests, reviewJoinRequest, members, isLoading } = useGroupDetail(id)
   const [activeTab, setActiveTab] = useState('activity')
   const [showUSSD, setShowUSSD] = useState(false)
   const [copied, setCopied] = useState(false)
@@ -118,7 +118,7 @@ export default function GroupDetailPage() {
       {/* Tabs */}
       <div className="px-5 mt-6">
         <div className="flex bg-gray-100 rounded-xl p-1">
-          {['activity', 'audit', 'members'].map(tab => (
+          {['activity', 'audit', 'members', ...(joinRequests.length ? ['requests'] : [])].map(tab => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -134,7 +134,18 @@ export default function GroupDetailPage() {
 
       {/* Content */}
       <div className="px-5 mt-4">
-        {activeTab === 'activity' ? (
+        {activeTab === 'requests' ? (
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+            {joinRequests.map((request) => (
+              <div key={request.id} className="flex items-center gap-3 p-4 border-b border-gray-50 last:border-0">
+                <div className="w-10 h-10 rounded-full bg-adansi-primary/20 flex items-center justify-center"><Users className="w-5 h-5 text-adansi-secondary" /></div>
+                <div className="flex-1"><p className="text-sm font-medium text-gray-900">New member request</p><p className="text-xs text-gray-500">{request.user_id} • {formatRelativeTime(request.created_at)}</p></div>
+                <button disabled={reviewJoinRequest.isPending} onClick={() => reviewJoinRequest.mutate({ requestId: request.id, approved: false })} className="px-2 py-1.5 text-xs font-semibold text-red-600 bg-red-50 rounded-lg">Reject</button>
+                <button disabled={reviewJoinRequest.isPending} onClick={() => reviewJoinRequest.mutate({ requestId: request.id, approved: true })} className="px-2 py-1.5 text-xs font-semibold text-adansi-secondary bg-adansi-primary rounded-lg">Approve</button>
+              </div>
+            ))}
+          </div>
+        ) : activeTab === 'activity' ? (
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
             {transactions.length === 0 ? (
               <div className="text-center py-8">

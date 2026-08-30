@@ -13,7 +13,12 @@ export default function JoinGroupPage() {
     e.preventDefault()
     try {
       const data = await joinGroup.mutateAsync(code.toUpperCase())
-      navigate(`/groups/${data.group_id}`)
+      if (data.status === 'pending') {
+        alert('Your request was sent to the group admin for approval.')
+        navigate('/groups')
+      } else {
+        navigate(`/groups/${data.group_id}`)
+      }
     } catch (err) {
       alert('Invalid code or failed to join. Please try again.')
     }

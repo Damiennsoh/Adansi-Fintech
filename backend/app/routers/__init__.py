@@ -10,9 +10,10 @@ from app.routers.ussd import router as ussd_router
 from app.routers.whatsapp import router as whatsapp_router
 from app.routers.momo import router as momo_router
 from app.routers.rates import router as rates_router
+from app.routers.admin import router as admin_router
 
 __all__ = [
     "auth_router", "users_router", "groups_router",
     "contributions_router", "withdrawals_router", "credit_router",
-    "agents_router", "ussd_router", "whatsapp_router", "momo_router", "rates_router"
+    "agents_router", "ussd_router", "whatsapp_router", "momo_router", "rates_router", "admin_router"
 ]
