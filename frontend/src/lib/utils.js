@@ -19,7 +19,9 @@ export function formatDate(dateString) {
 }
 
 export function formatRelativeTime(dateString) {
+  if (!dateString) return 'Recently';
   const date = new Date(dateString);
+  if (isNaN(date.getTime())) return 'Recently';
   const now = new Date();
   const diff = Math.floor((now - date) / 1000);
 

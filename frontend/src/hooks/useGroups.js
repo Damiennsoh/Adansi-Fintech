@@ -13,8 +13,8 @@ const mockGroups = [
     member_count: 12,
     cycle_period: 'weekly',
     recent_transactions: [
-      { id: 'tx-1', type: 'contribution', amount: 200, user: 'Amina Owusu', date: '2026-08-29' },
-      { id: 'tx-2', type: 'contribution', amount: 300, user: 'Kofi Mensah', date: '2026-08-28' }
+      { id: 'tx-1', type: 'contribution', amount: 200, member_name: 'Amina Owusu', status: 'completed', created_at: '2026-08-29T12:00:00Z' },
+      { id: 'tx-2', type: 'contribution', amount: 300, member_name: 'Kofi Mensah', status: 'completed', created_at: '2026-08-28T14:30:00Z' }
     ]
   },
   {
@@ -27,7 +27,7 @@ const mockGroups = [
     member_count: 8,
     cycle_period: 'monthly',
     recent_transactions: [
-      { id: 'tx-3', type: 'contribution', amount: 500, user: 'Damien Nsoh', date: '2026-08-25' }
+      { id: 'tx-3', type: 'contribution', amount: 500, member_name: 'Damien Nsoh', status: 'completed', created_at: '2026-08-25T09:15:00Z' }
     ]
   }
 ]
