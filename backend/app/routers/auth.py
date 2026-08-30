@@ -53,6 +53,40 @@ async def register_user(request: UserRegisterRequest, db: AsyncSession = Depends
     }
 
 
+@router.patch("/profile")
+async def update_profile(
+    phone: str,
+    full_name: str,
+    ghana_card_number: str | None = None,
+    db: AsyncSession = Depends(get_db)
+):
+    """Update profile during onboarding (capture full_name and optional Ghana Card)."""
+    user_result = await db.execute(select(User).where(User.phone == phone))
+    user = user_result.scalar_one_or_none()
+    if not user:
+        # Auto-create user record if not present
+        user = User(phone=phone, full_name=full_name, ghana_card_number=ghana_card_number)
+        db.add(user)
+    else:
+        user.full_name = full_name
+        if ghana_card_number:
+            user.ghana_card_number = ghana_card_number
+
+    await db.commit()
+    await db.refresh(user)
+
+    return {
+        "message": "Profile updated successfully",
+        "user": {
+            "id": str(user.id),
+            "phone": user.phone,
+            "full_name": user.full_name,
+            "ghana_card_number": user.ghana_card_number,
+            "role": user.role
+        }
+    }
+
+
 @router.post("/send-otp")
 async def send_otp(request: PinResetRequest):
     """Send OTP to phone number."""

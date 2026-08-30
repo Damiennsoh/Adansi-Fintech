@@ -16,18 +16,23 @@ export default function VerifyOTPPage() {
     return null
   }
 
+  const mode = location.state?.mode
+  const isReset = mode === 'reset'
+
   const handleVerify = async (e) => {
     e.preventDefault()
     try {
-      await verifyOTP.mutateAsync({ phone, otp, pin: isNewUser ? undefined : undefined })
+      const userRes = await verifyOTP.mutateAsync({ phone, otp, pin: isNewUser ? undefined : undefined })
 
-      if (isNewUser) {
-        navigate('/setup-pin', { state: { phone } })
+      if (isReset) {
+        navigate('/setup-pin', { state: { phone, mode: 'reset' } })
+      } else if (isNewUser || !userRes?.full_name) {
+        navigate('/setup-profile', { state: { phone } })
       } else {
         navigate('/dashboard')
       }
     } catch (err) {
-      alert('Invalid OTP. Please try again.')
+      alert(err.message || 'OTP verification failed. Please check the code and try again.')
     }
   }
 
@@ -66,7 +71,7 @@ export default function VerifyOTPPage() {
 
           <button
             type="submit"
-            disabled={verifyOTP.isPending || otp.length !== 6}
+            disabled={verifyOTP.isPending || otp.length < 4}
             className="w-full bg-adansi-primary text-adansi-secondary font-bold py-4 rounded-xl disabled:opacity-50 active:scale-[0.98] transition-transform flex items-center justify-center gap-2"
           >
             {verifyOTP.isPending ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Verify'}

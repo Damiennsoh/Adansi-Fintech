@@ -17,6 +17,7 @@ class User(Base):
     ghana_card_image_url = Column(String(500), nullable=True)
     full_name = Column(String(100), nullable=False)
     pin_hash = Column(String(255), nullable=True)  # bcrypt hashed
+    role = Column(String(20), default="user", nullable=False)  # user, agent, admin, super_admin
     is_verified = Column(Boolean, default=False)
     is_active = Column(Boolean, default=True)
     credit_score = Column(Integer, default=0)

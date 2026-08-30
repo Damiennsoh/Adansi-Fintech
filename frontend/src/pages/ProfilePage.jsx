@@ -13,8 +13,11 @@ export default function ProfilePage() {
     navigate('/login')
   }
 
+  const isAdmin = user?.role === 'admin' || user?.role === 'super_admin' || import.meta.env.DEV
+
   const menuItems = [
-    { icon: CreditCard, label: 'My Ghana Card', desc: 'Verify your identity', action: () => {} },
+    ...(isAdmin ? [{ icon: Shield, label: 'Admin Dashboard', desc: 'Platform overview & analytics', action: () => navigate('/admin') }] : []),
+    { icon: CreditCard, label: 'My Ghana Card', desc: user?.ghana_card_number ? user.ghana_card_number : 'Verify your identity', action: () => {} },
     { icon: Bell, label: 'Notifications', desc: 'Push & SMS preferences', action: () => {} },
     { icon: Shield, label: 'Security', desc: 'Change PIN, 2FA', action: () => {} },
     { icon: HelpCircle, label: 'Help & Support', desc: 'FAQ, contact us', action: () => {} },
@@ -26,10 +29,10 @@ export default function ProfilePage() {
         <h1 className="text-xl font-bold text-white mb-6">Profile</h1>
         <div className="flex items-center gap-4">
           <div className="w-16 h-16 rounded-full bg-adansi-primary flex items-center justify-center text-adansi-secondary text-2xl font-bold">
-            {user?.name?.charAt(0) || user?.phone?.charAt(4) || '?'}
+            {(user?.full_name || user?.name || '?').charAt(0)}
           </div>
           <div>
-            <h2 className="text-lg font-bold text-white">{user?.name || 'User'}</h2>
+            <h2 className="text-lg font-bold text-white">{user?.full_name || user?.name || 'Member'}</h2>
             <div className="flex items-center gap-1 text-gray-400 text-sm">
               <Phone className="w-3.5 h-3.5" />
               {user?.phone || '+233...'}

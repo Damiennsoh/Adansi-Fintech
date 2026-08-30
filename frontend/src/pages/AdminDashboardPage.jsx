@@ -227,17 +227,18 @@ export default function AdminDashboardPage() {
 
         {activeTab === 'agents' && (
           <div className="space-y-4">
-            <div className="bg-yellow-50 rounded-xl p-4 flex items-start gap-3">
-              <AlertTriangle className="w-5 h-5 text-yellow-600 mt-0.5 flex-shrink-0" />
+            <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 flex items-start gap-3">
+              <Shield className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
               <div>
-                <p className="text-sm font-medium text-yellow-900">{mockStats.pendingVerifications} Pending Verifications</p>
-                <p className="text-xs text-yellow-700 mt-1">These withdrawals require agent biometric verification before disbursement.</p>
+                <p className="text-sm font-medium text-blue-900">MTN MoMo Agent Network Analytics</p>
+                <p className="text-xs text-blue-700 mt-1">Digital treasury signatories manage standard withdrawals. Agent verification is available for optional Phase 2 integrations.</p>
               </div>
             </div>
 
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-              <div className="px-4 py-3 border-b border-gray-100">
-                <h3 className="font-bold text-gray-900 text-sm">Active Agents</h3>
+              <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+                <h3 className="font-bold text-gray-900 text-sm">Agent Network Activity</h3>
+                <span className="text-xs text-gray-500 font-medium">342 Registered Agents</span>
               </div>
               <div className="divide-y divide-gray-50">
                 {mockAgents.map(agent => (
@@ -255,9 +256,6 @@ export default function AdminDashboardPage() {
                       <p className="text-sm font-bold text-gray-900">{agent.verifications}</p>
                       <p className="text-[10px] text-gray-500">verifications</p>
                     </div>
-                    <button className="px-3 py-1.5 bg-adansi-primary text-adansi-secondary text-xs font-bold rounded-lg">
-                      Assign
-                    </button>
                   </div>
                 ))}
               </div>

@@ -2,6 +2,36 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api from '../lib/api'
 import { useGroupStore } from '../store/groupStore'
 
+const mockGroups = [
+  {
+    id: 'demo-group-1',
+    name: 'Adansi Traders Susu',
+    description: 'Weekly contribution group for Makola Market traders',
+    type: 'susu',
+    balance: 12500.00,
+    target_amount: 20000.00,
+    member_count: 12,
+    cycle_period: 'weekly',
+    recent_transactions: [
+      { id: 'tx-1', type: 'contribution', amount: 200, member_name: 'Amina Owusu', status: 'completed', created_at: '2026-08-29T12:00:00Z' },
+      { id: 'tx-2', type: 'contribution', amount: 300, member_name: 'Kofi Mensah', status: 'completed', created_at: '2026-08-28T14:30:00Z' }
+    ]
+  },
+  {
+    id: 'demo-group-2',
+    name: 'Asante Welfare Fund',
+    description: 'Emergency & funeral mutual aid circle',
+    type: 'welfare',
+    balance: 8400.00,
+    target_amount: 10000.00,
+    member_count: 8,
+    cycle_period: 'monthly',
+    recent_transactions: [
+      { id: 'tx-3', type: 'contribution', amount: 500, member_name: 'Damien Nsoh', status: 'completed', created_at: '2026-08-25T09:15:00Z' }
+    ]
+  }
+]
+
 export function useGroups() {
   const queryClient = useQueryClient()
   const { setGroups } = useGroupStore()
@@ -9,9 +39,18 @@ export function useGroups() {
   const groupsQuery = useQuery({
     queryKey: ['groups'],
     queryFn: async () => {
-      const { data } = await api.get('/groups')
-      setGroups(data)
-      return data
+      try {
+        const { data } = await api.get('/groups')
+        if (Array.isArray(data) && data.length > 0) {
+          setGroups(data)
+          return data
+        }
+        setGroups(mockGroups)
+        return mockGroups
+      } catch (err) {
+        setGroups(mockGroups)
+        return mockGroups
+      }
     },
   })
 

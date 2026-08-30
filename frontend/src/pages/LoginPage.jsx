@@ -18,7 +18,7 @@ export default function LoginPage() {
       await sendOTP.mutateAsync(`+233${phone.replace(/^0/, '')}`)
       navigate('/verify-otp', { state: { phone: `+233${phone.replace(/^0/, '')}` } })
     } catch (err) {
-      alert('Failed to send OTP. Please try again.')
+      alert(err.message || 'Failed to send OTP. Please try again.')
     }
   }
 
@@ -85,29 +85,42 @@ export default function LoginPage() {
               <input
                 type="password"
                 inputMode="numeric"
-                maxLength={4}
+                maxLength={6}
                 value={pin}
-                onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))}
-                placeholder="••••"
+                onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                placeholder="••••••"
                 className="w-full px-4 py-4 bg-white/10 border border-white/20 rounded-xl text-white text-center text-2xl tracking-[0.5em] placeholder-gray-600 focus:outline-none focus:border-adansi-primary"
               />
             </div>
 
             <button
               type="submit"
-              disabled={loginWithPIN.isPending || pin.length !== 4}
+              disabled={loginWithPIN.isPending || pin.length < 4}
               className="w-full bg-adansi-primary text-adansi-secondary font-bold py-4 rounded-xl disabled:opacity-50 active:scale-[0.98] transition-transform flex items-center justify-center gap-2"
             >
               {loginWithPIN.isPending ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Login'}
             </button>
 
-            <button
-              type="button"
-              onClick={() => setStep('phone')}
-              className="w-full text-gray-400 text-sm py-2 hover:text-white transition-colors"
-            >
-              Back to phone login
-            </button>
+            <div className="flex justify-between items-center text-xs">
+              <button
+                type="button"
+                onClick={() => setStep('phone')}
+                className="text-gray-400 hover:text-white transition-colors"
+              >
+                Back to phone login
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const targetPhone = phone ? `+233${phone.replace(/^0/, '')}` : '+233240000000'
+                  sendOTP.mutate(targetPhone)
+                  navigate('/verify-otp', { state: { phone: targetPhone, mode: 'reset' } })
+                }}
+                className="text-adansi-primary hover:underline transition-all"
+              >
+                Forgot PIN?
+              </button>
+            </div>
           </form>
         )}
 

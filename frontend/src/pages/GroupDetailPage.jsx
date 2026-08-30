@@ -72,6 +72,13 @@ export default function GroupDetailPage() {
           <p className="text-4xl font-bold">{formatCurrency(group.balance || 0)}</p>
         </div>
 
+        {/* Treasury Rule Badge */}
+        <div className="flex items-center justify-center gap-1.5 bg-black/20 text-adansi-primary text-xs px-3 py-1.5 rounded-full w-fit mx-auto mb-3 font-medium border border-adansi-primary/30">
+          <span>🛡️ Rule: {group.approval_rule === 'two_of_three_treasurers' ? '2 of 3 Treasurers' : group.approval_rule === 'majority_members' ? 'Majority (51%)' : 'Any 1 Treasurer'}</span>
+          <span>•</span>
+          <span>Auto-Approve: {formatCurrency(group.auto_approve_limit || 0)}</span>
+        </div>
+
         <div className="flex items-center justify-center gap-2 text-white/80 text-sm">
           <Users className="w-4 h-4" />
           <span>{members.length} members</span>
@@ -112,6 +119,88 @@ export default function GroupDetailPage() {
           >
             <Phone className="w-5 h-5 text-gray-600" />
           </button>
+        </div>
+      </div>
+
+      {/* Pending Member Join Request Card (Admin View) */}
+      <div className="px-5 mt-4">
+        <div className="bg-yellow-50 border border-yellow-200 rounded-2xl p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-yellow-900 flex items-center gap-1.5">
+              <Users className="w-4 h-4 text-yellow-600" />
+              1 Pending Member Join Request
+            </span>
+            <span className="text-[10px] bg-yellow-200/60 text-yellow-900 px-2 py-0.5 rounded-full font-bold">Admin Action</span>
+          </div>
+          <div className="flex items-center justify-between bg-white rounded-xl p-3 border border-yellow-100">
+            <div>
+              <p className="text-sm font-bold text-gray-900">Amina Owusu</p>
+              <p className="text-xs text-gray-500">+233 24 123 4567 • Requested 10m ago</p>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => alert('Member join request approved!')}
+                className="px-3 py-1.5 bg-green-600 text-white font-bold text-xs rounded-lg active:scale-95 transition-transform"
+              >
+                Approve
+              </button>
+              <button
+                onClick={() => alert('Member request declined.')}
+                className="px-3 py-1.5 bg-gray-200 text-gray-700 font-semibold text-xs rounded-lg active:scale-95 transition-transform"
+              >
+                Decline
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Digital Multi-Signatory Withdrawal Approval Panel */}
+      <div className="px-5 mt-4">
+        <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 space-y-3">
+          <div className="flex items-center justify-between border-b border-gray-100 pb-2">
+            <span className="text-xs font-bold text-gray-900 flex items-center gap-1.5">
+              🛡️ Pending Withdrawal Approval
+            </span>
+            <span className="text-[10px] bg-purple-50 text-purple-700 font-bold px-2 py-0.5 rounded-full">
+              2 of 3 Treasurers Rule
+            </span>
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex justify-between items-start">
+              <div>
+                <p className="text-sm font-bold text-gray-900">Kofi Mensah (Treasurer)</p>
+                <p className="text-xs text-gray-500">Reason: Coffin deposit & hearse booking</p>
+              </div>
+              <p className="text-sm font-bold text-red-600">-GHS 1,500.00</p>
+            </div>
+
+            <div className="space-y-1">
+              <div className="flex justify-between text-xs text-gray-600">
+                <span>Signatures Received:</span>
+                <span className="font-bold text-gray-900">1 of 2 Required</span>
+              </div>
+              <div className="w-full bg-gray-100 rounded-full h-2">
+                <div className="bg-adansi-primary rounded-full h-2 w-1/2" />
+              </div>
+            </div>
+
+            <div className="flex gap-2 pt-2">
+              <button
+                onClick={() => alert('Digital signature recorded! 2 of 2 signatures collected. Withdrawal disbursed via Hubtel MoMo.')}
+                className="flex-1 py-2.5 bg-adansi-primary text-adansi-secondary font-bold text-xs rounded-xl active:scale-95 transition-transform"
+              >
+                Approve & Sign Digitally
+              </button>
+              <button
+                onClick={() => alert('Withdrawal request declined.')}
+                className="px-4 py-2.5 bg-gray-100 text-gray-600 font-semibold text-xs rounded-xl"
+              >
+                Decline
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 

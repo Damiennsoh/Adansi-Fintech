@@ -27,7 +27,9 @@ export default function TransactionItem({ transaction }) {
         <p className="font-medium text-gray-900 truncate">
           {isContribution ? 'Contribution' : 'Withdrawal'}
         </p>
-        <p className="text-xs text-gray-500">{transaction.member_name || 'Unknown'} • {formatRelativeTime(transaction.created_at)}</p>
+        <p className="text-xs text-gray-500">
+          {transaction.member_name || transaction.user_name || transaction.user || 'Member'} • {formatRelativeTime(transaction.created_at || transaction.date)}
+        </p>
       </div>
 
       <div className="text-right">

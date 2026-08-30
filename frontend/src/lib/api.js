@@ -31,9 +31,15 @@ api.interceptors.response.use(
 
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true
+
+      const token = localStorage.getItem('adansi_access_token')
+      if (token && token.startsWith('demo-')) {
+        return Promise.reject(error)
+      }
+
       try {
         const refreshToken = localStorage.getItem('adansi_refresh_token')
-        if (!refreshToken) throw new Error('No refresh token available')
+        if (!refreshToken || refreshToken.startsWith('demo-')) throw new Error('No refresh token available')
 
         const { data } = await axios.post(`${API_URL}/auth/refresh`, {
           refresh_token: refreshToken,
@@ -50,6 +56,7 @@ api.interceptors.response.use(
       } catch (refreshError) {
         localStorage.removeItem('adansi_access_token')
         localStorage.removeItem('adansi_refresh_token')
+        localStorage.removeItem('adansi_user')
         window.location.href = '/login'
         return Promise.reject(refreshError)
       }
