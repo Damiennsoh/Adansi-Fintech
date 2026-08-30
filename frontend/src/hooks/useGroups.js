@@ -67,6 +67,15 @@ export function useGroupDetail(groupId) {
     enabled: !!groupId,
   })
 
+  const auditQuery = useQuery({
+    queryKey: ['audit', groupId],
+    queryFn: async () => {
+      const { data } = await api.get(`/groups/${groupId}/audit`)
+      return data.events || []
+    },
+    enabled: !!groupId,
+  })
+
   const membersQuery = useQuery({
     queryKey: ['members', groupId],
     queryFn: async () => {
@@ -86,7 +95,8 @@ export function useGroupDetail(groupId) {
 
   return {
     group: groupQuery.data,
-    transactions: transactionsQuery.data || [],
+    transactions: transactionsQuery.data?.contributions || transactionsQuery.data || [],
+    auditEvents: auditQuery.data || [],
     members: membersQuery.data || [],
     isLoading: groupQuery.isLoading,
     inviteMember,

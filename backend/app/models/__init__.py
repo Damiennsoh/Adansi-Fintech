@@ -6,6 +6,7 @@ from app.models.withdrawal import Withdrawal, WithdrawalApproval
 from app.models.credit import CreditProfile, Loan
 from app.models.agent import AgentVerification, InsurancePolicy
 from app.models.notification import Notification, UssdSession
+from app.models.mvp import GroupJoinRequest, AuditEvent, ExchangeRateQuote
 
 __all__ = [
     "User", "Group", "GroupMember",
@@ -13,5 +14,6 @@ __all__ = [
     "Withdrawal", "WithdrawalApproval",
     "CreditProfile", "Loan",
     "AgentVerification", "InsurancePolicy",
-    "Notification", "UssdSession"
+    "Notification", "UssdSession",
+    "GroupJoinRequest", "AuditEvent", "ExchangeRateQuote"
 ]

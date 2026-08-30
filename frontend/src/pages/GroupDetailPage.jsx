@@ -9,7 +9,7 @@ import USSDModal from '../components/USSDModal'
 export default function GroupDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const { group, transactions, members, isLoading } = useGroupDetail(id)
+  const { group, transactions, auditEvents, members, isLoading } = useGroupDetail(id)
   const [activeTab, setActiveTab] = useState('activity')
   const [showUSSD, setShowUSSD] = useState(false)
   const [copied, setCopied] = useState(false)
@@ -118,7 +118,7 @@ export default function GroupDetailPage() {
       {/* Tabs */}
       <div className="px-5 mt-6">
         <div className="flex bg-gray-100 rounded-xl p-1">
-          {['activity', 'members'].map(tab => (
+          {['activity', 'audit', 'members'].map(tab => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -178,6 +178,16 @@ export default function GroupDetailPage() {
                 ))}
               </div>
             )}
+          </div>
+        ) : activeTab === 'audit' ? (
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+            {auditEvents.length === 0 ? <p className="p-8 text-center text-sm text-gray-500">No audit events yet.</p> : auditEvents.map((event) => (
+              <div key={event.id} className="flex items-start gap-3 py-3 px-4 border-b border-gray-50 last:border-0">
+                <div className="w-8 h-8 rounded-full bg-adansi-primary/20 flex items-center justify-center"><Clock className="w-4 h-4 text-adansi-secondary" /></div>
+                <div className="flex-1"><p className="font-medium text-gray-900 text-sm">{event.event_type.replaceAll('_', ' ')}</p><p className="text-xs text-gray-500">{event.entity_type} • {formatRelativeTime(event.created_at)}</p></div>
+                {event.amount != null && <span className="text-sm font-semibold">{formatCurrency(event.amount)}</span>}
+              </div>
+            ))}
           </div>
         ) : (
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">

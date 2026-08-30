@@ -5,6 +5,7 @@ from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
 from uuid import UUID
 from typing import List
+from datetime import datetime
 
 from app.database import get_db
 from app.middleware.auth import get_current_user
@@ -14,7 +15,7 @@ from app.schemas.group import (
     GroupCreateRequest, GroupResponse, GroupListResponse,
     JoinGroupRequest, InviteMemberRequest
 )
-from app.models import Group, GroupMember, User, Contribution
+from app.models import Group, GroupMember, User, Contribution, AuditEvent, GroupJoinRequest
 
 router = APIRouter(prefix="/groups", tags=["Groups"])
 
@@ -96,9 +97,45 @@ async def get_group_by_code(code: str, db: AsyncSession = Depends(get_db)):
 
 @router.post("/{group_id}/join")
 async def join_group(group_id: UUID, current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    """Join a group by ID."""
-    member = await group_service.join_group(group_id, current_user.id)
-    return {"message": "Joined successfully", "member_id": str(member.id)}
+    """Create a join request; admins approve membership."""
+    group = await db.get(Group, group_id)
+    if not group:
+        raise HTTPException(status_code=404, detail="Group not found")
+    existing = await db.execute(select(GroupMember).where(GroupMember.group_id == group_id, GroupMember.user_id == current_user.id))
+    if existing.scalar_one_or_none():
+        return {"message": "Already a member", "status": "approved"}
+    request = GroupJoinRequest(group_id=group_id, user_id=current_user.id)
+    db.add(request)
+    db.add(AuditEvent(group_id=group_id, actor_id=current_user.id, event_type="join_requested", entity_type="join_request", entity_id=request.id))
+    await db.commit()
+    return {"message": "Join request submitted", "request_id": str(request.id), "status": "pending"} 
+
+@router.get("/{group_id}/audit")
+async def get_group_audit(group_id: UUID, current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    member = await db.execute(select(GroupMember).where(GroupMember.group_id == group_id, GroupMember.user_id == current_user.id))
+    if not member.scalar_one_or_none(): raise HTTPException(status_code=403, detail="Not a member")
+    result = await db.execute(select(AuditEvent).where(AuditEvent.group_id == group_id).order_by(AuditEvent.created_at.desc()).limit(100))
+    return {"events": [{"id": str(e.id), "event_type": e.event_type, "entity_type": e.entity_type, "entity_id": str(e.entity_id) if e.entity_id else None, "amount": float(e.amount) if e.amount is not None else None, "metadata": e.event_metadata, "created_at": e.created_at} for e in result.scalars().all()]}
+
+@router.get("/{group_id}/join-requests")
+async def get_join_requests(group_id: UUID, current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    admin = await db.execute(select(GroupMember).where(GroupMember.group_id == group_id, GroupMember.user_id == current_user.id, GroupMember.role.in_(["admin", "treasurer"])))
+    if not admin.scalar_one_or_none(): raise HTTPException(status_code=403, detail="Only group admins can review requests")
+    result = await db.execute(select(GroupJoinRequest).where(GroupJoinRequest.group_id == group_id, GroupJoinRequest.status == "pending"))
+    return {"requests": [{"id": str(r.id), "user_id": str(r.user_id), "status": r.status, "created_at": r.created_at} for r in result.scalars().all()]}
+
+@router.post("/{group_id}/join-requests/{request_id}/review")
+async def review_join_request(group_id: UUID, request_id: UUID, approved: bool, current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    admin = await db.execute(select(GroupMember).where(GroupMember.group_id == group_id, GroupMember.user_id == current_user.id, GroupMember.role == "admin"))
+    if not admin.scalar_one_or_none(): raise HTTPException(status_code=403, detail="Only admins can review requests")
+    result = await db.execute(select(GroupJoinRequest).where(GroupJoinRequest.id == request_id, GroupJoinRequest.group_id == group_id))
+    request = result.scalar_one_or_none()
+    if not request or request.status != "pending": raise HTTPException(status_code=404, detail="Pending request not found")
+    request.status = "approved" if approved else "rejected"; request.reviewed_by = current_user.id; request.reviewed_at = datetime.utcnow()
+    if approved: db.add(GroupMember(group_id=group_id, user_id=request.user_id, role="member"))
+    db.add(AuditEvent(group_id=group_id, actor_id=current_user.id, event_type="join_approved" if approved else "join_rejected", entity_type="join_request", entity_id=request.id))
+    await db.commit()
+    return {"status": request.status}
 
 
 @router.post("/join-by-code")
