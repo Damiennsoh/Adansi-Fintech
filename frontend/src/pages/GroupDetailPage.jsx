@@ -72,6 +72,13 @@ export default function GroupDetailPage() {
           <p className="text-4xl font-bold">{formatCurrency(group.balance || 0)}</p>
         </div>
 
+        {/* Treasury Rule Badge */}
+        <div className="flex items-center justify-center gap-1.5 bg-black/20 text-adansi-primary text-xs px-3 py-1.5 rounded-full w-fit mx-auto mb-3 font-medium border border-adansi-primary/30">
+          <span>🛡️ Rule: {group.approval_rule === 'two_of_three_treasurers' ? '2 of 3 Treasurers' : group.approval_rule === 'majority_members' ? 'Majority (51%)' : 'Any 1 Treasurer'}</span>
+          <span>•</span>
+          <span>Auto-Approve: {formatCurrency(group.auto_approve_limit || 0)}</span>
+        </div>
+
         <div className="flex items-center justify-center gap-2 text-white/80 text-sm">
           <Users className="w-4 h-4" />
           <span>{members.length} members</span>

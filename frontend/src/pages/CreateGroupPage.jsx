@@ -6,6 +6,7 @@ import { ArrowLeft, Loader2, Users, Target, Calendar } from 'lucide-react'
 const groupTypes = [
   { key: 'funeral', label: 'Funeral', desc: 'Funeral contributions & expenses', color: 'bg-purple-500' },
   { key: 'wedding', label: 'Wedding', desc: 'Wedding contributions & planning', color: 'bg-pink-500' },
+  { key: 'business', label: 'Business Group', desc: 'Bulk buying for market traders & shop owners', color: 'bg-emerald-600' },
   { key: 'health', label: 'Health', desc: 'Medical bills & health support', color: 'bg-green-500' },
   { key: 'savings', label: 'Savings', desc: 'Rotating savings (Susu)', color: 'bg-blue-500' },
   { key: 'investment', label: 'Investment', desc: 'Group investment pool', color: 'bg-orange-500' },
@@ -139,9 +140,56 @@ export default function CreateGroupPage() {
             value={form.description}
             onChange={(e) => setForm({ ...form, description: e.target.value })}
             placeholder="What is this group for?"
-            rows={3}
-            className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl focus:outline-none focus:border-adansi-primary focus:ring-2 focus:ring-adansi-primary/20 resize-none"
+            rows={2}
+            className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl focus:outline-none focus:border-adansi-primary focus:ring-2 focus:ring-adansi-primary/20 resize-none text-sm"
           />
+        </div>
+
+        {/* Treasury Signatory Configuration */}
+        <div className="bg-adansi-secondary/5 border border-adansi-primary/20 rounded-2xl p-4 space-y-4">
+          <h3 className="font-bold text-gray-900 text-sm flex items-center gap-2">
+            🛡️ Digital Treasury Configuration
+          </h3>
+
+          <div>
+            <label className="block text-xs font-semibold text-gray-700 mb-1">Withdrawal Approval Rule</label>
+            <select
+              value={form.approval_rule || 'any_1_treasurer'}
+              onChange={(e) => setForm({ ...form, approval_rule: e.target.value })}
+              className="w-full px-3 py-2.5 bg-white border border-gray-200 rounded-xl text-xs focus:outline-none focus:border-adansi-primary"
+            >
+              <option value="any_1_treasurer">Any 1 Treasurer (Default for small groups)</option>
+              <option value="two_of_three_treasurers">2 of 3 Treasurers (Recommended for 3+ members)</option>
+              <option value="majority_members">Majority of Members (51% vote)</option>
+              <option value="unanimous_members">Unanimous Members (100% vote)</option>
+            </select>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 mb-1">Auto-Approve Limit (GHS)</label>
+              <input
+                type="number"
+                value={form.auto_approve_limit || 0}
+                onChange={(e) => setForm({ ...form, auto_approve_limit: parseFloat(e.target.value) || 0 })}
+                placeholder="0"
+                className="w-full px-3 py-2.5 bg-white border border-gray-200 rounded-xl text-xs focus:outline-none focus:border-adansi-primary"
+              />
+              <p className="text-[10px] text-gray-500 mt-1">Withdrawals under this limit skip voting</p>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 mb-1">Join Request Rule</label>
+              <select
+                value={form.join_type || 'approval_required'}
+                onChange={(e) => setForm({ ...form, join_type: e.target.value })}
+                className="w-full px-3 py-2.5 bg-white border border-gray-200 rounded-xl text-xs focus:outline-none focus:border-adansi-primary"
+              >
+                <option value="approval_required">Approval Required (Admin approves)</option>
+                <option value="open">Open (Instant join)</option>
+                <option value="invite_only">Invite Only</option>
+              </select>
+            </div>
+          </div>
         </div>
 
         <button

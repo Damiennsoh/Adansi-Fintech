@@ -20,7 +20,11 @@ class Group(Base):
     created_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     status = Column(String(20), default="active")  # active, paused, completed, dissolved
     withdrawal_threshold = Column(DECIMAL(15, 2), default=500.00)
-    agent_verification_required = Column(Boolean, default=True)
+    approval_rule = Column(String(50), default="any_1_treasurer")  # any_1_treasurer, two_of_three_treasurers, majority_members, unanimous_members
+    auto_approve_limit = Column(DECIMAL(15, 2), default=0)
+    approval_timeout_hours = Column(Integer, default=24)
+    join_type = Column(String(20), default="approval_required")  # open, approval_required, invite_only
+    agent_verification_required = Column(Boolean, default=False)
     contribution_frequency = Column(String(20), nullable=True)  # daily, weekly, monthly, adhoc
     contribution_amount = Column(DECIMAL(10, 2), nullable=True)
     auto_insurance_enabled = Column(Boolean, default=False)

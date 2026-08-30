@@ -19,7 +19,10 @@ class Withdrawal(Base):
     # pending -> approved -> agent_pending -> verified -> completed
     # or any state -> rejected
     approval_count = Column(Integer, default=0)
-    approval_required = Column(Integer, default=3)
+    approval_required = Column(Integer, default=1)
+    required_approvals_config = Column(Text, nullable=True)  # JSON representation of rules
+    expires_at = Column(DateTime(timezone=True), nullable=True)
+    approved_at = Column(DateTime(timezone=True), nullable=True)
     agent_id = Column(String(50), nullable=True)  # MoMo agent ID
     agent_verified_at = Column(DateTime(timezone=True), nullable=True)
     disbursed_at = Column(DateTime(timezone=True), nullable=True)

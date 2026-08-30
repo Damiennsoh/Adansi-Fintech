@@ -117,13 +117,26 @@ export default function LoginPage() {
               {loginWithPIN.isPending ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Login'}
             </button>
 
-            <button
-              type="button"
-              onClick={() => setStep('phone')}
-              className="w-full text-gray-400 text-sm py-2 hover:text-white transition-colors"
-            >
-              Back to phone login
-            </button>
+            <div className="flex justify-between items-center text-xs">
+              <button
+                type="button"
+                onClick={() => setStep('phone')}
+                className="text-gray-400 hover:text-white transition-colors"
+              >
+                Back to phone login
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const targetPhone = phone ? `+233${phone.replace(/^0/, '')}` : '+233240000000'
+                  sendOTP.mutate(targetPhone)
+                  navigate('/verify-otp', { state: { phone: targetPhone, mode: 'reset' } })
+                }}
+                className="text-adansi-primary hover:underline transition-all"
+              >
+                Forgot PIN?
+              </button>
+            </div>
           </form>
         )}
 

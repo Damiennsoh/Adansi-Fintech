@@ -1,0 +1,633 @@
+# ADANSI — DEVELOPMENT GUIDE (Cursor Context)
+# Compiled from settled architecture decisions
+# Date: 2026-08-30
+# For: MTN MoMo Fintech Lab 2026 Hackathon
+
+================================================================================
+TABLE OF CONTENTS
+================================================================================
+
+1.  ARCHITECTURE OVERVIEW
+2.  AUTHENTICATION & ONBOARDING
+3.  USER MODEL & ROLES
+4.  GROUP MODEL & TREASURY SIGNATORY SYSTEM
+5.  WITHDRAWAL ALGORITHM (OPTION C — NO MANDATORY AGENT VERIFICATION)
+6.  INDIVIDUAL / PERSONAL CONTRIBUTIONS
+7.  CREDIT SCORING SYSTEM
+8.  MARKETPLACE
+9.  ADMIN DASHBOARD
+10. AGENT VERIFICATION (FUTURE MOCK / USSD)
+11. DATABASE SCHEMA UPDATES
+12. API ENDPOINT CHANGES
+13. FRONTEND ROUTE MAP
+14. ENVIRONMENT VARIABLES
+
+================================================================================
+1. ARCHITECTURE OVERVIEW
+================================================================================
+
+Stack:
+- Frontend: Vite + React 18 + Tailwind CSS + PWA
+- Backend: FastAPI + SQLAlchemy (async)
+- Database: Supabase PostgreSQL
+- Auth: Supabase Auth (Phone OTP)
+- Cache: Upstash Redis
+- Payments: Hubtel MoMo API
+- Notifications: Twilio WhatsApp API
+- Hosting: Vercel (frontend) + Render (backend)
+
+Core Principle:
+The app serves BOTH group contributions AND individual personal contributions.
+A user can create a "Personal Savings" group (type: "personal") with only
+themselves as member/treasurer, OR join/create multi-person groups.
+
+================================================================================
+2. AUTHENTICATION & ONBOARDING
+================================================================================
+
+FLOW:
+[Phone Number] → [OTP via SMS] → [Full Name Input] → [Ghana Card Upload (optional)] → [PIN Setup] → [Dashboard]
+
+CRITICAL ADDITIONS:
+A. NAME CAPTURE (was missing — caused "Unknown" in transactions)
+   - After OTP verification, BEFORE PIN setup, collect:
+     • full_name (required, text input)
+     • ghana_card_number (optional, text input)
+     • ghana_card_image (optional, file upload to Supabase Storage)
+
+B. FORGOT PIN FLOW
+   - On login screen: "Forgot PIN?" link
+   - Flow:
+     1. User enters phone number
+     2. Backend sends OTP via Supabase Auth
+     3. User enters OTP
+     4. User sets new PIN (same screen as setup-pin)
+     5. Backend hashes new PIN, updates users table
+
+BACKEND ENDPOINTS NEEDED:
+```
+POST /auth/forgot-pin
+Body: { phone: "+233240000000" }
+→ Sends OTP via Supabase
+
+POST /auth/reset-pin
+Body: { phone: "+233240000000", otp: "123456", new_pin: "1234" }
+→ Verifies OTP, hashes PIN with bcrypt, updates DB
+```
+
+USER TABLE UPDATES:
+```sql
+ALTER TABLE users ADD COLUMN full_name VARCHAR(255) NOT NULL DEFAULT '';
+ALTER TABLE users ADD COLUMN ghana_card_number VARCHAR(20);
+ALTER TABLE users ADD COLUMN ghana_card_image_url VARCHAR(500);
+ALTER TABLE users ADD COLUMN role VARCHAR(20) DEFAULT 'user' CHECK (role IN ('user', 'agent', 'admin', 'super_admin'));
+```
+
+================================================================================
+3. USER MODEL & ROLES
+================================================================================
+
+ROLES:
+| Role        | Who                          | What They See/Do                          |
+|-------------|------------------------------|-------------------------------------------|
+| user        | Regular app users            | Dashboard, groups, credit, profile      |
+| agent       | MoMo agents (future)         | Agent verification portal (future)        |
+| admin       | Platform staff / MTN team    | Admin dashboard, analytics, agent mgmt    |
+| super_admin | Dev team / MTN executives    | Everything + user management              |
+
+GROUP ROLES (per group, stored in group_members table):
+| Role      | Permissions                                           |
+|-----------|-------------------------------------------------------|
+| creator   | Full control, can delete group, change settings       |
+| treasurer | Can request withdrawals, designated money handler     |
+| admin     | Can approve members, remove members, edit group info  |
+| member    | Can contribute, vote on withdrawals, view history     |
+
+NOTE: A single user can have different roles in different groups.
+
+================================================================================
+4. GROUP MODEL & TREASURY SIGNATORY SYSTEM
+================================================================================
+
+GROUP CREATION FIELDS (new additions):
+```
+name: string (required)
+type: enum ['funeral', 'wedding', 'health', 'savings', 'investment', 'personal']
+description: string (optional)
+target_amount: decimal (optional, 0 = no target)
+contribution_amount: decimal (optional, suggested amount)
+frequency: enum ['daily', 'weekly', 'monthly', 'one_time', 'adhoc']
+
+-- NEW: Treasury Configuration --
+treasurer_ids: array of user_ids (1-3 members)
+approval_rule: enum [
+  'any_1_treasurer',      -- Any 1 treasurer approves
+  'two_of_three',         -- 2 of 3 treasurers (if 3 exist)
+  'majority_members',     -- 51% of all members
+  'unanimous'             -- 100% of all members
+]
+auto_approve_limit: decimal (default 0, max a treasurer can withdraw alone)
+approval_timeout_hours: integer (default 24, hours before request expires)
+```
+
+GROUP CREATION FLOW:
+1. User fills group info
+2. User selects 1-3 treasurers from members (creator is default treasurer)
+3. User selects approval rule from dropdown
+4. User sets auto-approve limit (can be 0)
+5. Group is created with short code (6 chars)
+
+GROUP JOINING FLOW:
+1. User enters group code
+2. Group admin/creator receives notification:
+   "[Full Name] (+23324...) wants to join [Group Name]"
+3. Admin taps Approve or Reject
+4. If approved → user becomes member
+5. If rejected → user gets toast: "Your request was declined"
+
+IMPORTANT: No instant joining. Admin approval required for all groups.
+
+================================================================================
+5. WITHDRAWAL ALGORITHM (OPTION C — NO MANDATORY AGENT VERIFICATION)
+================================================================================
+
+RULE: Agent verification is NOT mandatory for any withdrawal.
+Instead, use digital treasury signatories.
+
+WITHDRAWAL REQUEST FLOW:
+```
+1. Treasurer opens group → taps "Withdraw"
+2. Enters: amount, reason, recipient_momo_number
+3. Backend checks:
+   a. Is requester a treasurer of this group? → If NO, reject
+   b. Is amount <= group.balance? → If NO, reject
+   c. Is amount <= auto_approve_limit? → If YES, disburse immediately
+   d. If NO → Create withdrawal request, enter approval workflow
+```
+
+APPROVAL WORKFLOW ALGORITHM:
+```python
+def process_withdrawal_request(group, requester, amount, reason):
+    # Step 1: Validate
+    if requester.id not in group.treasurer_ids:
+        return {"error": "Only treasurers can request withdrawals"}
+
+    if amount > group.balance:
+        return {"error": "Insufficient group balance"}
+
+    # Step 2: Auto-approve check
+    if amount <= group.auto_approve_limit:
+        disburse_funds(group, requester, amount)
+        return {"status": "disbursed", "method": "auto_approve"}
+
+    # Step 3: Route based on approval_rule
+    withdrawal = create_withdrawal_record(
+        group_id=group.id,
+        requester_id=requester.id,
+        amount=amount,
+        reason=reason,
+        status="pending_approval",
+        required_approvals=calculate_required_approvals(group),
+        expires_at=now() + timedelta(hours=group.approval_timeout_hours)
+    )
+
+    # Notify relevant parties
+    if group.approval_rule in ['any_1_treasurer', 'two_of_three']:
+        notify_treasurers(group, withdrawal)
+    else:
+        notify_all_members(group, withdrawal)
+
+    return {"status": "pending", "withdrawal_id": withdrawal.id}
+
+
+def calculate_required_approvals(group):
+    rule = group.approval_rule
+
+    if rule == 'any_1_treasurer':
+        return 1
+    elif rule == 'two_of_three':
+        return 2
+    elif rule == 'majority_members':
+        return ceil(group.member_count * 0.51)
+    elif rule == 'unanimous':
+        return group.member_count
+
+    return 1  # fallback
+
+
+def approve_withdrawal(withdrawal_id, approver_id):
+    withdrawal = get_withdrawal(withdrawal_id)
+
+    # Check if already approved by this person
+    if approver_id in withdrawal.approvals:
+        return {"error": "Already approved"}
+
+    # Check if approver has permission
+    group = get_group(withdrawal.group_id)
+
+    if group.approval_rule in ['any_1_treasurer', 'two_of_three']:
+        if approver_id not in group.treasurer_ids:
+            return {"error": "Only treasurers can approve"}
+    else:
+        if not is_group_member(group.id, approver_id):
+            return {"error": "Only members can approve"}
+
+    # Record approval
+    withdrawal.approvals.append(approver_id)
+    withdrawal.approval_count += 1
+
+    # Check if threshold met
+    if withdrawal.approval_count >= withdrawal.required_approvals:
+        withdrawal.status = "approved"
+        disburse_funds(group, withdrawal.requester, withdrawal.amount)
+        notify_all_members(group, f"Withdrawal of GHS {amount} approved and disbursed")
+
+    return {"status": withdrawal.status, "approvals": withdrawal.approval_count}
+
+
+def handle_expired_withdrawals():
+    """Run as background job every hour"""
+    expired = db.query(Withdrawal).filter(
+        Withdrawal.status == "pending_approval",
+        Withdrawal.expires_at < now()
+    ).all()
+
+    for w in expired:
+        w.status = "expired"
+        notify_user(w.requester_id, "Your withdrawal request expired. Not enough approvals.")
+```
+
+EXAMPLES:
+| Group | Members | Contribution | Setup | Withdrawal | Result |
+|-------|---------|--------------|-------|------------|--------|
+| 4 business partners | 4 | GHS 10,000 each | 2 treasurers, "two_of_three" | GHS 15,000 | Both treasurers approve digitally. Done in 2 minutes. |
+| Family funeral fund | 6 | GHS 500 each | 1 treasurer, auto-approve GHS 2,000 | GHS 1,500 | Auto-approved. No vote needed. |
+| University class | 35 | GHS 100 each | 3 treasurers, "two_of_three" | GHS 3,000 | Any 2 of 3 class reps approve. No waiting for 18 people. |
+| Church building | 200 | GHS 50 each | 3 treasurers, "majority_members" | GHS 50,000 | 102 members must approve within 24h. Non-voters = abstain. |
+
+================================================================================
+6. INDIVIDUAL / PERSONAL CONTRIBUTIONS
+================================================================================
+
+CONCEPT:
+A user can create a "Personal" group where they are the ONLY member.
+This serves as their personal savings wallet within Adansi.
+
+USE CASES:
+- Personal emergency fund
+- Personal vacation savings
+- Individual credit building (contributions to own wallet still count for credit score)
+
+IMPLEMENTATION:
+- Group type: "personal"
+- Auto-created on first login if user has no groups
+- Member count: 1
+- Treasurer: the user themselves
+- Auto-approve limit: unlimited (it's their own money)
+- No approval workflow needed for withdrawals
+
+FRONTEND:
+- Dashboard shows "Personal Wallet" card alongside group cards
+- Dedicated "Personal" tab or section
+- Same contribute/withdraw UI but labeled "My Savings"
+
+CREDIT SCORING:
+- Personal contributions count toward credit score
+- Personal withdrawals do NOT penalize score (it's their money)
+- Consistency of personal savings = higher credit tier
+
+================================================================================
+7. CREDIT SCORING SYSTEM
+================================================================================
+
+SCORE RANGE: 0 – 850
+
+FACTORS (individual-based, not group-based):
+| Factor | Weight | What It Measures |
+|--------|--------|------------------|
+| Consistency | 35% | Regular contributions over time (weekly/monthly pattern) |
+| Volume | 25% | Total amount contributed across all groups + personal |
+| Diversity | 15% | Number of different groups contributed to |
+| Tenure | 10% | How long user has been active on platform |
+| Standing | 10% | Group roles held (treasurer = bonus), approval rate |
+| Behavior | 5% | Loan repayment history, no fraud flags |
+
+TIERS:
+| Score | Tier | Loan Eligibility | Interest Rate |
+|-------|------|-------------------|-----------------|
+| 750+ | Platinum | GHS 10,000 | 3% monthly |
+| 650-749 | Gold | GHS 5,000 | 5% monthly |
+| 550-649 | Silver | GHS 2,000 | 7% monthly |
+| 400-549 | Bronze | GHS 500 | 10% monthly |
+| < 400 | New | GHS 0 | N/A |
+
+LOAN APPLICATION:
+- User applies from Credit page
+- Backend checks score + eligibility
+- Loan can be individual OR group-backed
+- Group-backed loan: group vouches, reducing interest by 2%
+- Repayment via MoMo auto-deduct or manual payment
+
+================================================================================
+8. MARKETPLACE
+================================================================================
+
+STATUS: Mock data for hackathon. Live API integration in Phase 2.
+
+CURRENT (MVP):
+- 5-10 mock deals (coffins, catering, insurance, textbooks, canopies)
+- Hardcoded prices and discounts
+- "Group Order" button → mock success message
+
+PHASE 2 (Post-Hackathon):
+- Integrate real merchant onboarding API
+- Live inventory from partner merchants
+- Real payment settlement to merchant accounts
+- Commission tracking (3-5% per transaction)
+
+MERCHANT ONBOARDING (Future):
+```
+1. Merchant visits /merchant-register
+2. Provides: business name, owner Ghana Card, business reg number,
+   bank account / MoMo merchant ID, category, product catalog
+3. Admin reviews and approves
+4. Merchant gets dashboard to manage deals
+```
+
+FOR DEMO DAY:
+Show mock marketplace as "proof of concept for B2B2C revenue stream."
+Judges understand it is mocked. The UI shows the vision.
+
+================================================================================
+9. ADMIN DASHBOARD
+================================================================================
+
+VISIBILITY:
+- ONLY visible to users with role = 'admin' or 'super_admin'
+- Regular users MUST NOT see admin link or be able to access /admin
+
+GATE IMPLEMENTATION:
+```jsx
+// Frontend: AdminRoute guard
+function AdminRoute({ children }) {
+  const { user } = useAuthStore()
+  if (user?.role !== 'admin' && user?.role !== 'super_admin') {
+    return <Navigate to="/dashboard" replace />
+  }
+  return children
+}
+
+// Backend: Admin middleware
+async def require_admin(request: Request):
+    user = await get_current_user(request)
+    if user.role not in ['admin', 'super_admin']:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    return user
+```
+
+PROFILE PAGE:
+- Only show "Admin Dashboard" menu item if user.role === 'admin'
+- Regular users see: My Ghana Card, Notifications, Security, Help
+
+ADMIN DASHBOARD TABS:
+| Tab | Content |
+|-----|---------|
+| Overview | Stats cards (users, groups, volume, verifications), recent transactions, agent network summary |
+| Transactions | Searchable full ledger with filters |
+| Agents | Active agent list, verification counts, status |
+| Analytics | 7-day volume chart, credit score distribution, diaspora metrics |
+
+REMOVE FROM ADMIN:
+- "Assign" button for agent verification (no longer needed with Option C)
+- Manual agent assignment queue
+
+================================================================================
+10. AGENT VERIFICATION (FUTURE MOCK / USSD)
+================================================================================
+
+STATUS: NOT mandatory. NOT built for MVP. Future feature only.
+
+FOR DEMO DAY:
+- Build a simple mock agent page at `/agent-verify` (or `/agent-portal`)
+- This is a SINGLE HTML page showing:
+  • Input field for withdrawal code
+  • Display of group name, amount, treasurer name
+  • Checkbox: "ID Verified"
+  • Submit button
+- Frame it as: "Future MTN Agent Integration Point"
+
+USSD FLOW (Future Concept):
+```
+Agent dials: *422*9*[withdrawal-code]#
+USSD Response:
+"Group: Uncle Kofi Funeral Fund
+Amount: GHS 8,000
+Treasurer: Kofi Mensah
+Press 1 to confirm ID match
+Press 2 to reject"
+```
+
+PITCH TO JUDGES:
+> "For the MVP, we use digital treasury signatories — 2 of 3 treasurers
+> approve large withdrawals. Agent verification is a Phase 2 feature that
+> integrates into MTN's existing agent USSD menu. No new hardware needed."
+
+================================================================================
+11. DATABASE SCHEMA UPDATES
+================================================================================
+
+USERS TABLE:
+```sql
+CREATE TABLE users (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    phone VARCHAR(20) UNIQUE NOT NULL,
+    full_name VARCHAR(255) NOT NULL,
+    pin_hash VARCHAR(255) NOT NULL,
+    ghana_card_number VARCHAR(20),
+    ghana_card_image_url VARCHAR(500),
+    role VARCHAR(20) DEFAULT 'user' CHECK (role IN ('user', 'agent', 'admin', 'super_admin')),
+    credit_score INTEGER DEFAULT 400,
+    loan_eligibility DECIMAL(12,2) DEFAULT 0,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+```
+
+GROUPS TABLE:
+```sql
+CREATE TABLE groups (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name VARCHAR(255) NOT NULL,
+    code VARCHAR(6) UNIQUE NOT NULL,
+    type VARCHAR(20) NOT NULL CHECK (type IN ('funeral', 'wedding', 'health', 'savings', 'investment', 'personal')),
+    description TEXT,
+    target_amount DECIMAL(12,2) DEFAULT 0,
+    contribution_amount DECIMAL(12,2) DEFAULT 0,
+    frequency VARCHAR(20) DEFAULT 'monthly',
+    balance DECIMAL(12,2) DEFAULT 0,
+
+    -- Treasury Configuration --
+    approval_rule VARCHAR(30) DEFAULT 'any_1_treasurer' CHECK (approval_rule IN ('any_1_treasurer', 'two_of_three', 'majority_members', 'unanimous')),
+    auto_approve_limit DECIMAL(12,2) DEFAULT 0,
+    approval_timeout_hours INTEGER DEFAULT 24,
+
+    created_by UUID REFERENCES users(id),
+    created_at TIMESTAMP DEFAULT NOW()
+);
+```
+
+GROUP_MEMBERS TABLE:
+```sql
+CREATE TABLE group_members (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    group_id UUID REFERENCES groups(id) ON DELETE CASCADE,
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    role VARCHAR(20) DEFAULT 'member' CHECK (role IN ('creator', 'treasurer', 'admin', 'member')),
+    total_contributed DECIMAL(12,2) DEFAULT 0,
+    joined_at TIMESTAMP DEFAULT NOW(),
+    UNIQUE(group_id, user_id)
+);
+```
+
+WITHDRAWALS TABLE:
+```sql
+CREATE TABLE withdrawals (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    group_id UUID REFERENCES groups(id),
+    requester_id UUID REFERENCES users(id),
+    amount DECIMAL(12,2) NOT NULL,
+    reason TEXT,
+    status VARCHAR(20) DEFAULT 'pending_approval' CHECK (status IN ('pending_approval', 'approved', 'rejected', 'expired', 'disbursed')),
+    required_approvals INTEGER DEFAULT 1,
+    approval_count INTEGER DEFAULT 0,
+    approvals UUID[] DEFAULT '{}',
+    recipient_momo_number VARCHAR(20),
+    expires_at TIMESTAMP,
+    created_at TIMESTAMP DEFAULT NOW(),
+    disbursed_at TIMESTAMP
+);
+```
+
+CONTRIBUTIONS TABLE:
+```sql
+CREATE TABLE contributions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    group_id UUID REFERENCES groups(id),
+    user_id UUID REFERENCES users(id),
+    amount DECIMAL(12,2) NOT NULL,
+    status VARCHAR(20) DEFAULT 'pending' CHECK (status IN ('pending', 'completed', 'failed')),
+    hubtel_transaction_id VARCHAR(100),
+    created_at TIMESTAMP DEFAULT NOW()
+);
+```
+
+================================================================================
+12. API ENDPOINT CHANGES
+================================================================================
+
+NEW / MODIFIED ENDPOINTS:
+
+AUTH:
+```
+POST /auth/register          → phone, full_name, ghana_card (optional)
+POST /auth/verify-otp        → phone, otp, pin, full_name
+POST /auth/login             → phone, pin
+POST /auth/forgot-pin        → phone
+POST /auth/reset-pin         → phone, otp, new_pin
+POST /auth/refresh           → refresh_token
+```
+
+USERS:
+```
+GET  /users/me               → profile + credit score
+PUT  /users/me               → update profile (name, ghana_card)
+```
+
+GROUPS:
+```
+POST /groups                 → create with treasury config
+GET  /groups                 → list my groups
+GET  /groups/:id             → group detail + members + transactions
+POST /groups/:id/join        → request to join (creates pending request)
+POST /groups/:id/approve-member → admin approves join request
+POST /groups/:id/invite      → invite by phone
+PUT  /groups/:id/treasurers  → update treasurers (creator only)
+```
+
+WITHDRAWALS:
+```
+POST /withdrawals            → request withdrawal
+POST /withdrawals/:id/approve → approve/reject withdrawal
+GET  /withdrawals/:id        → withdrawal status
+```
+
+ADMIN:
+```
+GET  /admin/dashboard        → stats, transactions, agents (admin only)
+GET  /admin/transactions     → full platform ledger (admin only)
+GET  /admin/agents           → agent list (admin only)
+```
+
+================================================================================
+13. FRONTEND ROUTE MAP
+================================================================================
+
+PUBLIC:
+  /login
+  /verify-otp
+  /setup-pin
+
+PROTECTED (all users):
+  /dashboard
+  /groups
+  /groups/create
+  /groups/join
+  /groups/:id
+  /groups/:id/contribute
+  /groups/:id/withdraw
+  /credit
+  /profile
+  /notifications
+  /diaspora
+  /marketplace
+
+ADMIN ONLY:
+  /admin
+
+FUTURE (not in MVP):
+  /agent-verify       (mock page for demo purposes)
+  /merchant-register  (Phase 2)
+
+================================================================================
+14. ENVIRONMENT VARIABLES
+================================================================================
+
+FRONTEND (.env):
+```
+VITE_SUPABASE_URL=https://your-project.supabase.co
+VITE_SUPABASE_ANON_KEY=your-anon-key
+VITE_API_URL=https://your-backend.onrender.com/api/v1
+```
+
+BACKEND (.env):
+```
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=your-service-key
+JWT_SECRET=your-super-secret-key
+
+HUBTEL_CLIENT_ID=your-hubtel-id
+HUBTEL_CLIENT_SECRET=your-hubtel-secret
+
+TWILIO_SID=your-twilio-sid
+TWILIO_TOKEN=your-twilio-token
+TWILIO_WHATSAPP_NUMBER=whatsapp:+14155238886
+
+UPSTASH_REDIS_REST_URL=https://your-redis.upstash.io
+UPSTASH_REDIS_REST_TOKEN=your-redis-token
+
+ENVIRONMENT=development
+```
+
+================================================================================
+END OF DOCUMENT
+================================================================================

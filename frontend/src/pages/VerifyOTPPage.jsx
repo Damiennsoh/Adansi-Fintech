@@ -16,13 +16,18 @@ export default function VerifyOTPPage() {
     return null
   }
 
+  const mode = location.state?.mode
+  const isReset = mode === 'reset'
+
   const handleVerify = async (e) => {
     e.preventDefault()
     try {
-      await verifyOTP.mutateAsync({ phone, otp, pin: isNewUser ? undefined : undefined })
+      const userRes = await verifyOTP.mutateAsync({ phone, otp, pin: isNewUser ? undefined : undefined })
 
-      if (isNewUser) {
-        navigate('/setup-pin', { state: { phone } })
+      if (isReset) {
+        navigate('/setup-pin', { state: { phone, mode: 'reset' } })
+      } else if (isNewUser || !userRes?.full_name) {
+        navigate('/setup-profile', { state: { phone } })
       } else {
         navigate('/dashboard')
       }

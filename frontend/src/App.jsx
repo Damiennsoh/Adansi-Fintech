@@ -20,9 +20,11 @@ import WithdrawPage from './pages/WithdrawPage'
 import CreditPage from './pages/CreditPage'
 import ProfilePage from './pages/ProfilePage'
 import NotificationsPage from './pages/NotificationsPage'
-import AdminDashboardPage from './pages/AdminDashboardPage'
 import DiasporaPage from './pages/DiasporaPage'
 import MarketplacePage from './pages/MarketplacePage'
+import AdminDashboardPage from './pages/AdminDashboardPage'
+import ProfileSetupPage from './pages/ProfileSetupPage'
+import AgentVerifyMockPage from './pages/AgentVerifyMockPage'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -33,6 +35,14 @@ const queryClient = new QueryClient({
     },
   },
 })
+
+function AdminRoute({ children }) {
+  const { user } = useAuthStore()
+  if (user?.role !== 'admin' && user?.role !== 'super_admin') {
+    return <Navigate to="/dashboard" replace />
+  }
+  return children
+}
 
 function AppInitializer({ children }) {
   const { initAuth, isLoading } = useAuthStore()
@@ -54,7 +64,9 @@ export default function App() {
             {/* Public routes */}
             <Route path="/login" element={<LoginPage />} />
             <Route path="/verify-otp" element={<VerifyOTPPage />} />
+            <Route path="/setup-profile" element={<ProfileSetupPage />} />
             <Route path="/setup-pin" element={<SetupPINPage />} />
+            <Route path="/agent-verify-demo" element={<AgentVerifyMockPage />} />
 
             {/* Protected routes */}
             <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
@@ -70,7 +82,7 @@ export default function App() {
               <Route path="/notifications" element={<NotificationsPage />} />
               <Route path="/diaspora" element={<DiasporaPage />} />
               <Route path="/marketplace" element={<MarketplacePage />} />
-              <Route path="/admin" element={<AdminDashboardPage />} />
+              <Route path="/admin" element={<AdminRoute><AdminDashboardPage /></AdminRoute>} />
             </Route>
 
             {/* Redirect root */}
