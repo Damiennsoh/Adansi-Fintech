@@ -9,7 +9,7 @@ import USSDModal from '../components/USSDModal'
 export default function GroupDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const { group, transactions, members, isLoading } = useGroupDetail(id)
+  const { group, transactions, auditEvents, joinRequests, reviewJoinRequest, members, isLoading } = useGroupDetail(id)
   const [activeTab, setActiveTab] = useState('activity')
   const [showUSSD, setShowUSSD] = useState(false)
   const [copied, setCopied] = useState(false)
@@ -207,7 +207,7 @@ export default function GroupDetailPage() {
       {/* Tabs */}
       <div className="px-5 mt-6">
         <div className="flex bg-gray-100 rounded-xl p-1">
-          {['activity', 'members'].map(tab => (
+          {['activity', 'audit', 'members', ...(joinRequests.length ? ['requests'] : [])].map(tab => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -223,7 +223,18 @@ export default function GroupDetailPage() {
 
       {/* Content */}
       <div className="px-5 mt-4">
-        {activeTab === 'activity' ? (
+        {activeTab === 'requests' ? (
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+            {joinRequests.map((request) => (
+              <div key={request.id} className="flex items-center gap-3 p-4 border-b border-gray-50 last:border-0">
+                <div className="w-10 h-10 rounded-full bg-adansi-primary/20 flex items-center justify-center"><Users className="w-5 h-5 text-adansi-secondary" /></div>
+                <div className="flex-1"><p className="text-sm font-medium text-gray-900">New member request</p><p className="text-xs text-gray-500">{request.user_id} • {formatRelativeTime(request.created_at)}</p></div>
+                <button disabled={reviewJoinRequest.isPending} onClick={() => reviewJoinRequest.mutate({ requestId: request.id, approved: false })} className="px-2 py-1.5 text-xs font-semibold text-red-600 bg-red-50 rounded-lg">Reject</button>
+                <button disabled={reviewJoinRequest.isPending} onClick={() => reviewJoinRequest.mutate({ requestId: request.id, approved: true })} className="px-2 py-1.5 text-xs font-semibold text-adansi-secondary bg-adansi-primary rounded-lg">Approve</button>
+              </div>
+            ))}
+          </div>
+        ) : activeTab === 'activity' ? (
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
             {transactions.length === 0 ? (
               <div className="text-center py-8">
@@ -267,6 +278,16 @@ export default function GroupDetailPage() {
                 ))}
               </div>
             )}
+          </div>
+        ) : activeTab === 'audit' ? (
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+            {auditEvents.length === 0 ? <p className="p-8 text-center text-sm text-gray-500">No audit events yet.</p> : auditEvents.map((event) => (
+              <div key={event.id} className="flex items-start gap-3 py-3 px-4 border-b border-gray-50 last:border-0">
+                <div className="w-8 h-8 rounded-full bg-adansi-primary/20 flex items-center justify-center"><Clock className="w-4 h-4 text-adansi-secondary" /></div>
+                <div className="flex-1"><p className="font-medium text-gray-900 text-sm">{event.event_type.replaceAll('_', ' ')}</p><p className="text-xs text-gray-500">{event.entity_type} • {formatRelativeTime(event.created_at)}</p></div>
+                {event.amount != null && <span className="text-sm font-semibold">{formatCurrency(event.amount)}</span>}
+              </div>
+            ))}
           </div>
         ) : (
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">

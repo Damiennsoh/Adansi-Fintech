@@ -6,6 +6,8 @@ import {
   AlertTriangle, Search, Filter, ChevronDown, BarChart3
 } from 'lucide-react'
 import { formatCurrency, formatRelativeTime } from '../lib/utils'
+import { useQuery } from '@tanstack/react-query'
+import api from '../lib/api'
 
 const mockStats = {
   totalUsers: 1247,
@@ -30,16 +32,23 @@ const mockAgents = [
   { id: 3, name: 'Agent Kofi', location: 'Tamale Junction', verifications: 28, status: 'offline' },
 ]
 
-const statCards = [
-  { label: 'Total Users', value: mockStats.totalUsers, icon: Users, color: 'bg-blue-50 text-blue-600', change: '+12%' },
-  { label: 'Active Groups', value: mockStats.totalGroups, icon: Wallet, color: 'bg-green-50 text-green-600', change: '+8%' },
-  { label: 'Transaction Volume', value: formatCurrency(mockStats.totalVolume), icon: TrendingUp, color: 'bg-purple-50 text-purple-600', change: '+23%' },
-  { label: 'Pending Verifications', value: mockStats.pendingVerifications, icon: Shield, color: 'bg-yellow-50 text-yellow-600', change: '-3' },
+const getStatCards = (stats) => [
+  { label: 'Total Users', value: stats.totalUsers, icon: Users, color: 'bg-blue-50 text-blue-600', change: 'live' },
+  { label: 'Active Groups', value: stats.totalGroups, icon: Wallet, color: 'bg-green-50 text-green-600', change: 'live' },
+  { label: 'Transaction Volume', value: formatCurrency(stats.totalVolume), icon: TrendingUp, color: 'bg-purple-50 text-purple-600', change: 'live' },
+  { label: 'Pending Contributions', value: stats.pendingVerifications, icon: Shield, color: 'bg-yellow-50 text-yellow-600', change: 'live' },
 ]
 
 export default function AdminDashboardPage() {
   const [activeTab, setActiveTab] = useState('overview')
-  const [searchQuery, setSearchQuery] = useState('')
+  const overviewQuery = useQuery({
+    queryKey: ['admin-overview'],
+    queryFn: async () => (await api.get('/admin/overview')).data,
+    retry: false,
+  })
+  const liveStats = overviewQuery.data?.stats || mockStats
+  const liveTransactions = overviewQuery.data?.transactions || mockTransactions
+  const statCards = getStatCards(liveStats)
 
   const tabs = [
     { key: 'overview', label: 'Overview', icon: LayoutDashboard },
@@ -108,7 +117,7 @@ export default function AdminDashboardPage() {
                 </button>
               </div>
               <div className="divide-y divide-gray-50">
-                {mockTransactions.slice(0, 3).map(tx => (
+                {liveTransactions.slice(0, 3).map(tx => (
                   <div key={tx.id} className="flex items-center gap-3 py-3 px-4">
                     <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
                       tx.type === 'contribution' ? 'bg-green-50' : 'bg-red-50'
@@ -185,7 +194,7 @@ export default function AdminDashboardPage() {
               </div>
             </div>
             <div className="divide-y divide-gray-50">
-              {mockTransactions.map(tx => (
+              {liveTransactions.map(tx => (
                 <div key={tx.id} className="flex items-center gap-3 py-3 px-4">
                   <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
                     tx.type === 'contribution' ? 'bg-green-50' : 'bg-red-50'

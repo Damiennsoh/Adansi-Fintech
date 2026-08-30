@@ -106,6 +106,37 @@ export function useGroupDetail(groupId) {
     enabled: !!groupId,
   })
 
+  const auditQuery = useQuery({
+    queryKey: ['audit', groupId],
+    queryFn: async () => {
+      const { data } = await api.get(`/groups/${groupId}/audit`)
+      return data.events || []
+    },
+    enabled: !!groupId,
+  })
+
+  const joinRequestsQuery = useQuery({
+    queryKey: ['join-requests', groupId],
+    queryFn: async () => {
+      const { data } = await api.get(`/groups/${groupId}/join-requests`)
+      return data.requests || []
+    },
+    enabled: !!groupId,
+    retry: false,
+  })
+
+  const reviewJoinRequest = useMutation({
+    mutationFn: async ({ requestId, approved }) => {
+      const { data } = await api.post(`/groups/${groupId}/join-requests/${requestId}/review`, null, { params: { approved } })
+      return data
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['join-requests', groupId] })
+      queryClient.invalidateQueries({ queryKey: ['group', groupId] })
+      queryClient.invalidateQueries({ queryKey: ['members', groupId] })
+    },
+  })
+
   const membersQuery = useQuery({
     queryKey: ['members', groupId],
     queryFn: async () => {
@@ -125,7 +156,10 @@ export function useGroupDetail(groupId) {
 
   return {
     group: groupQuery.data,
-    transactions: transactionsQuery.data || [],
+    transactions: transactionsQuery.data?.contributions || transactionsQuery.data || [],
+    auditEvents: auditQuery.data || [],
+    joinRequests: joinRequestsQuery.data || [],
+    reviewJoinRequest,
     members: membersQuery.data || [],
     isLoading: groupQuery.isLoading,
     inviteMember,

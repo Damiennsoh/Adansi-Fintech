@@ -3,6 +3,7 @@ from fastapi import APIRouter, HTTPException, status, Depends, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from uuid import UUID
+from datetime import datetime
 
 from app.database import get_db
 from app.middleware.auth import get_current_user
@@ -13,7 +14,7 @@ from app.schemas.withdrawal import (
     WithdrawalCreateRequest, WithdrawalApprovalRequest,
     AgentVerifyRequest, WithdrawalResponse
 )
-from app.models import Withdrawal, WithdrawalApproval, Group, GroupMember, User, Transaction
+from app.models import Withdrawal, WithdrawalApproval, Group, GroupMember, User, Transaction, AuditEvent
 
 router = APIRouter(prefix="/withdrawals", tags=["Withdrawals"])
 
@@ -47,6 +48,19 @@ async def request_withdrawal(
     # Check if agent verification is needed
     needs_agent = group.agent_verification_required and request.amount >= group.withdrawal_threshold
 
+    # Calculate the threshold from designated treasury signers, never all members.
+    treasury_count = len([m for m in group.members if m.role in ["admin", "treasurer"]])
+    if treasury_count == 0:
+        raise HTTPException(status_code=400, detail="This group has no designated treasury signers")
+    if group.approval_rule == "unanimous":
+        required_approvals = treasury_count
+    elif group.approval_rule == "majority":
+        required_approvals = treasury_count // 2 + 1
+    elif group.approval_rule == "2_of_3":
+        required_approvals = min(2, treasury_count)
+    else:
+        required_approvals = 1
+
     # Create withdrawal record
     withdrawal = Withdrawal(
         group_id=request.group_id,
@@ -54,7 +68,7 @@ async def request_withdrawal(
         amount=request.amount,
         reason=request.reason,
         status="pending",
-        approval_required=max(2, len(group.members) // 2)  # At least 2 approvals, or half of members
+        approval_required=required_approvals
     )
     db.add(withdrawal)
     await db.commit()
@@ -145,8 +159,11 @@ async def approve_withdrawal(
             GroupMember.user_id == current_user.id
         )
     )
-    if not member_check.scalar_one_or_none():
+    member = member_check.scalar_one_or_none()
+    if not member:
         raise HTTPException(status_code=403, detail="You are not a member of this group")
+    if member.role not in ["admin", "treasurer"]:
+        raise HTTPException(status_code=403, detail="Only designated treasurers can approve withdrawals")
 
     # Check if already voted
     existing = await db.execute(
@@ -282,6 +299,7 @@ async def disburse_withdrawal(
         external_ref=result["reference"]
     )
     db.add(transaction)
+    db.add(AuditEvent(group_id=withdrawal.group_id, actor_id=current_user.id, event_type="withdrawal_settled", entity_type="withdrawal", entity_id=withdrawal.id, amount=withdrawal.amount, event_metadata={"reference": result["reference"], "external_ref": result["reference"]}))
 
     await db.commit()
 

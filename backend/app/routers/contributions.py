@@ -11,7 +11,7 @@ from app.services.momo_service import momo_service
 from app.services.credit_service import credit_engine
 from app.services.notification_service import notification_service
 from app.schemas.contribution import ContributionCreateRequest, ContributionResponse, MomoCallbackPayload
-from app.models import Contribution, Group, GroupMember, User, Transaction
+from app.models import Contribution, Group, GroupMember, User, Transaction, AuditEvent
 
 router = APIRouter(prefix="/contributions", tags=["Contributions"])
 
@@ -123,6 +123,11 @@ async def verify_contribution(
     if contribution.status != "pending":
         raise HTTPException(status_code=400, detail=f"Contribution is already {contribution.status}")
 
+    # Idempotency guard: a completed transaction can never be posted twice.
+    existing_transaction = await db.scalar(select(Transaction).where(Transaction.reference == contribution.transaction_ref))
+    if existing_transaction:
+        return {"message": "Contribution already settled", "contribution_id": str(contribution_id), "status": "completed"}
+
     # Mark as completed
     contribution.status = "completed"
 
@@ -157,6 +162,7 @@ async def verify_contribution(
         external_ref=contribution.momo_transaction_id
     )
     db.add(transaction)
+    db.add(AuditEvent(group_id=contribution.group_id, actor_id=current_user.id, event_type="contribution_settled", entity_type="contribution", entity_id=contribution.id, amount=contribution.amount, event_metadata={"reference": contribution.transaction_ref, "method": contribution.method}))
 
     await db.commit()
 
@@ -196,7 +202,8 @@ async def hubtel_callback(
     if not contribution:
         return {"status": "ignored", "reason": "Contribution not found"}
 
-    if contribution.status != "pending":
+    existing_transaction = await db.scalar(select(Transaction).where(Transaction.reference == client_ref))
+    if contribution.status != "pending" or existing_transaction:
         return {"status": "ignored", "reason": "Already processed"}
 
     if status == "success":
@@ -234,6 +241,7 @@ async def hubtel_callback(
             external_ref=transaction_id
         )
         db.add(transaction)
+        db.add(AuditEvent(group_id=contribution.group_id, actor_id=None, event_type="contribution_settled", entity_type="contribution", entity_id=contribution.id, amount=contribution.amount, event_metadata={"reference": client_ref, "provider": "hubtel", "external_ref": transaction_id}))
 
         await db.commit()
 

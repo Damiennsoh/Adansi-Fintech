@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import api from '../lib/api'
 import { useNavigate } from 'react-router-dom'
 import { 
   Globe, ArrowLeft, Search, CreditCard, TrendingUp, 
@@ -26,8 +28,19 @@ export default function DiasporaPage() {
   const [currency, setCurrency] = useState('USD')
   const [searchCode, setSearchCode] = useState('')
   const [foundGroup, setFoundGroup] = useState(null)
-
-  const rate = exchangeRates[currency].rate
+  const ratesQuery = useQuery({
+    queryKey: ['exchange-rates'],
+    queryFn: async () => {
+      const entries = await Promise.all(Object.keys(exchangeRates).map(async (base) => {
+        const { data } = await api.get(`/rates/${base}`)
+        return [base, { ...exchangeRates[base], rate: Number(data.rate), fetchedAt: data.fetched_at }]
+      }))
+      return Object.fromEntries(entries)
+    },
+    staleTime: 10 * 60 * 1000,
+  })
+  const liveRates = ratesQuery.data || exchangeRates
+  const rate = liveRates[currency].rate
   const foreignAmount = amountGHS ? (parseFloat(amountGHS) / rate).toFixed(2) : '0.00'
   const fee = amountGHS ? (parseFloat(amountGHS) * 0.01).toFixed(2) : '0.00'
   const total = amountGHS ? (parseFloat(amountGHS) + parseFloat(fee)).toFixed(2) : '0.00'
@@ -90,7 +103,7 @@ export default function DiasporaPage() {
 
         {/* Exchange Rate Ticker */}
         <div className="flex gap-3 overflow-x-auto scrollbar-hide pb-1">
-          {Object.entries(exchangeRates).map(([curr, data]) => (
+          {Object.entries(liveRates).map(([curr, data]) => (
             <button
               key={curr}
               onClick={() => setCurrency(curr)}
@@ -205,7 +218,7 @@ export default function DiasporaPage() {
               </div>
               {amountGHS && (
                 <p className="text-sm text-gray-500 mt-2">
-                  {exchangeRates[currency].flag} {foreignAmount} {currency} at rate {rate}
+                  {liveRates[currency].flag} {foreignAmount} {currency} at live rate {rate.toFixed(4)}{ratesQuery.isFetching ? ' (refreshing...)' : ''}
                 </p>
               )}
             </div>

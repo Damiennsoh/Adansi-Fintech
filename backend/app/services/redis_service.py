@@ -32,6 +32,24 @@ class RedisService:
         return f"adansi:{prefix}:{identifier}"
 
     @classmethod
+    def set_json(cls, key_suffix: str, data: dict, ttl: int) -> None:
+        payload = json.dumps(data)
+        if redis_client:
+            redis_client.setex(cls._key("cache", key_suffix), ttl, payload)
+        else:
+            _memory_store[cls._key("cache", key_suffix)] = payload
+
+    @classmethod
+    def get_json(cls, key_suffix: str) -> Optional[dict]:
+        payload = redis_client.get(cls._key("cache", key_suffix)) if redis_client else _memory_store.get(cls._key("cache", key_suffix))
+        if not payload:
+            return None
+        try:
+            return json.loads(payload)
+        except (TypeError, json.JSONDecodeError):
+            return None
+
+    @classmethod
     def set_ussd_session(cls, session_id: str, data: dict) -> None:
         """Store USSD session state with TTL."""
         key = cls._key("ussd", session_id)

@@ -14,8 +14,12 @@ export default function JoinGroupPage() {
   const handleJoin = async (e) => {
     e.preventDefault()
     try {
-      await joinGroup.mutateAsync(code.toUpperCase())
-      setRequestSent(true)
+      const data = await joinGroup.mutateAsync(code.toUpperCase())
+      if (data.status === 'pending') {
+        setRequestSent(true)
+      } else {
+        navigate(`/groups/${data.group_id}`)
+      }
     } catch (err) {
       // Demo fallback success
       setRequestSent(true)
