@@ -32,8 +32,12 @@ export default function DiasporaPage() {
     queryKey: ['exchange-rates'],
     queryFn: async () => {
       const entries = await Promise.all(Object.keys(exchangeRates).map(async (base) => {
-        const { data } = await api.get(`/rates/${base}`)
-        return [base, { ...exchangeRates[base], rate: Number(data.rate), fetchedAt: data.fetched_at }]
+        try {
+          const { data } = await api.get(`/rates/${base}`)
+          return [base, { ...exchangeRates[base], rate: Number(data.rate), fetchedAt: data.fetched_at }]
+        } catch (err) {
+          return [base, exchangeRates[base]]
+        }
       }))
       return Object.fromEntries(entries)
     },

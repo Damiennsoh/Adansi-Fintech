@@ -1,20 +1,24 @@
 """Withdrawal endpoints with full approval workflow."""
 from fastapi import APIRouter, HTTPException, status, Depends, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import select
 from uuid import UUID
 from datetime import datetime
 
 from app.database import get_db
 from app.middleware.auth import get_current_user
-from app.services.momo_service import momo_service
 from app.services.notification_service import notification_service
-from app.services.credit_service import credit_engine
+from app.services.withdrawal_service import (
+    calculate_required_approvals,
+    execute_disbursement,
+    validate_ghana_phone,
+    withdrawal_expires_at,
+)
 from app.schemas.withdrawal import (
     WithdrawalCreateRequest, WithdrawalApprovalRequest,
-    AgentVerifyRequest, WithdrawalResponse
+    AgentVerifyRequest,
 )
-from app.models import Withdrawal, WithdrawalApproval, Group, GroupMember, User, Transaction, AuditEvent
+from app.models import Withdrawal, WithdrawalApproval, Group, GroupMember, User
 
 router = APIRouter(prefix="/withdrawals", tags=["Withdrawals"])
 
@@ -26,8 +30,7 @@ async def request_withdrawal(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """Request withdrawal from group. Triggers approval workflow."""
-    # Verify user is treasurer or admin
+    """Request withdrawal from group. Triggers approval workflow or auto-disburse."""
     role_check = await db.execute(
         select(GroupMember.role).where(
             GroupMember.group_id == request.group_id,
@@ -35,8 +38,8 @@ async def request_withdrawal(
         )
     )
     role = role_check.scalar_one_or_none()
-    if role not in ["admin", "treasurer"]:
-        raise HTTPException(status_code=403, detail="Only admins or treasurers can request withdrawals")
+    if role not in ["admin", "treasurer", "creator"]:
+        raise HTTPException(status_code=403, detail="Only treasurers can request withdrawals")
 
     group = await db.get(Group, request.group_id)
     if not group:
@@ -45,38 +48,74 @@ async def request_withdrawal(
     if group.current_balance < request.amount:
         raise HTTPException(status_code=400, detail="Insufficient group balance")
 
-    # Check if agent verification is needed
+    beneficiary_phone = request.beneficiary_phone
+    if beneficiary_phone and request.disbursement_method != "bank_transfer":
+        if not validate_ghana_phone(beneficiary_phone):
+            raise HTTPException(status_code=400, detail="Invalid beneficiary phone number")
+
+    if not request.beneficiary_name or not beneficiary_phone:
+        raise HTTPException(
+            status_code=400,
+            detail="Beneficiary name and phone are required for direct disbursement"
+        )
+
+    auto_limit = float(group.auto_approve_limit or 0)
+    if auto_limit > 0 and float(request.amount) <= auto_limit:
+        withdrawal = Withdrawal(
+            group_id=request.group_id,
+            requested_by=current_user.id,
+            amount=request.amount,
+            reason=request.reason,
+            beneficiary_name=request.beneficiary_name,
+            beneficiary_phone=beneficiary_phone,
+            beneficiary_network=request.beneficiary_network or "mtn",
+            disbursement_method=request.disbursement_method or "momo",
+            beneficiary_bank_account=request.beneficiary_bank_account,
+            status="approved",
+            approval_required=0,
+            approval_count=0,
+            approved_at=datetime.utcnow(),
+        )
+        db.add(withdrawal)
+        await db.flush()
+
+        result = await execute_disbursement(withdrawal, group, current_user.id, db)
+        if not result["success"]:
+            raise HTTPException(status_code=502, detail=result.get("error", "Auto-disbursement failed"))
+
+        return {
+            "message": "Withdrawal auto-approved and disbursed",
+            "withdrawal_id": str(withdrawal.id),
+            "amount": float(request.amount),
+            "status": "disbursed",
+            "method": "auto_approved",
+            "beneficiary": request.beneficiary_name,
+            "transaction_ref": result.get("reference"),
+        }
+
+    required_approvals = calculate_required_approvals(group)
     needs_agent = group.agent_verification_required and request.amount >= group.withdrawal_threshold
 
-    # Calculate the threshold from designated treasury signers, never all members.
-    treasury_count = len([m for m in group.members if m.role in ["admin", "treasurer"]])
-    if treasury_count == 0:
-        raise HTTPException(status_code=400, detail="This group has no designated treasury signers")
-    if group.approval_rule == "unanimous":
-        required_approvals = treasury_count
-    elif group.approval_rule == "majority":
-        required_approvals = treasury_count // 2 + 1
-    elif group.approval_rule == "2_of_3":
-        required_approvals = min(2, treasury_count)
-    else:
-        required_approvals = 1
-
-    # Create withdrawal record
     withdrawal = Withdrawal(
         group_id=request.group_id,
         requested_by=current_user.id,
         amount=request.amount,
         reason=request.reason,
+        beneficiary_name=request.beneficiary_name,
+        beneficiary_phone=beneficiary_phone,
+        beneficiary_network=request.beneficiary_network or "mtn",
+        disbursement_method=request.disbursement_method or "momo",
+        beneficiary_bank_account=request.beneficiary_bank_account,
         status="pending",
-        approval_required=required_approvals
+        approval_required=required_approvals,
+        expires_at=withdrawal_expires_at(group),
     )
     db.add(withdrawal)
     await db.commit()
     await db.refresh(withdrawal)
 
-    # Notify all group members for approval
     for member in group.members:
-        if member.user_id != current_user.id:
+        if member.user_id != current_user.id and member.role in ("admin", "treasurer", "creator"):
             user = await db.get(User, member.user_id)
             if user:
                 await notification_service.send_withdrawal_request(
@@ -93,7 +132,8 @@ async def request_withdrawal(
         "amount": float(request.amount),
         "approvals_required": withdrawal.approval_required,
         "needs_agent_verification": needs_agent,
-        "status": "pending"
+        "status": "pending",
+        "beneficiary": request.beneficiary_name,
     }
 
 
@@ -104,7 +144,6 @@ async def get_withdrawal(withdrawal_id: UUID, current_user: User = Depends(get_c
     if not withdrawal:
         raise HTTPException(status_code=404, detail="Withdrawal not found")
 
-    # Verify user is group member
     member_check = await db.execute(
         select(GroupMember).where(
             GroupMember.group_id == withdrawal.group_id,
@@ -114,7 +153,6 @@ async def get_withdrawal(withdrawal_id: UUID, current_user: User = Depends(get_c
     if not member_check.scalar_one_or_none():
         raise HTTPException(status_code=403, detail="Access denied")
 
-    # Get approval details
     approvals_result = await db.execute(
         select(WithdrawalApproval).where(WithdrawalApproval.withdrawal_id == withdrawal_id)
     )
@@ -125,6 +163,9 @@ async def get_withdrawal(withdrawal_id: UUID, current_user: User = Depends(get_c
         "group_id": str(withdrawal.group_id),
         "amount": float(withdrawal.amount),
         "reason": withdrawal.reason,
+        "beneficiary_name": withdrawal.beneficiary_name,
+        "beneficiary_phone": withdrawal.beneficiary_phone,
+        "beneficiary_network": withdrawal.beneficiary_network,
         "status": withdrawal.status,
         "approval_count": withdrawal.approval_count,
         "approval_required": withdrawal.approval_required,
@@ -133,8 +174,51 @@ async def get_withdrawal(withdrawal_id: UUID, current_user: User = Depends(get_c
             for a in approvals
         ],
         "agent_verified": withdrawal.agent_verified_at is not None,
-        "created_at": withdrawal.created_at
+        "created_at": withdrawal.created_at,
+        "expires_at": withdrawal.expires_at,
     }
+
+
+@router.get("/group/{group_id}/pending")
+async def get_pending_withdrawals(
+    group_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """List pending withdrawals for a group."""
+    member_check = await db.execute(
+        select(GroupMember).where(
+            GroupMember.group_id == group_id,
+            GroupMember.user_id == current_user.id
+        )
+    )
+    if not member_check.scalar_one_or_none():
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    result = await db.execute(
+        select(Withdrawal).where(
+            Withdrawal.group_id == group_id,
+            Withdrawal.status == "pending"
+        ).order_by(Withdrawal.created_at.desc())
+    )
+    withdrawals = result.scalars().all()
+
+    items = []
+    for w in withdrawals:
+        requester = await db.get(User, w.requested_by)
+        items.append({
+            "id": str(w.id),
+            "amount": float(w.amount),
+            "reason": w.reason,
+            "beneficiary_name": w.beneficiary_name,
+            "beneficiary_phone": w.beneficiary_phone,
+            "requester_name": requester.full_name if requester else "Unknown",
+            "approval_count": w.approval_count,
+            "approval_required": w.approval_required,
+            "created_at": w.created_at,
+        })
+
+    return {"withdrawals": items}
 
 
 @router.post("/{withdrawal_id}/approve")
@@ -144,7 +228,7 @@ async def approve_withdrawal(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """Member approves or rejects a pending withdrawal."""
+    """Treasurer approves or rejects a pending withdrawal."""
     withdrawal = await db.get(Withdrawal, withdrawal_id)
     if not withdrawal:
         raise HTTPException(status_code=404, detail="Withdrawal not found")
@@ -152,7 +236,11 @@ async def approve_withdrawal(
     if withdrawal.status != "pending":
         raise HTTPException(status_code=400, detail=f"Withdrawal is already {withdrawal.status}")
 
-    # Verify user is group member
+    if withdrawal.expires_at and datetime.utcnow() > withdrawal.expires_at.replace(tzinfo=None):
+        withdrawal.status = "expired"
+        await db.commit()
+        raise HTTPException(status_code=400, detail="Withdrawal request has expired")
+
     member_check = await db.execute(
         select(GroupMember).where(
             GroupMember.group_id == withdrawal.group_id,
@@ -162,10 +250,15 @@ async def approve_withdrawal(
     member = member_check.scalar_one_or_none()
     if not member:
         raise HTTPException(status_code=403, detail="You are not a member of this group")
-    if member.role not in ["admin", "treasurer"]:
-        raise HTTPException(status_code=403, detail="Only designated treasurers can approve withdrawals")
 
-    # Check if already voted
+    group = await db.get(Group, withdrawal.group_id)
+    rule = group.approval_rule or "any_1_treasurer"
+    if rule in ("any_1_treasurer", "two_of_three_treasurers"):
+        if member.role not in ("admin", "treasurer", "creator"):
+            raise HTTPException(status_code=403, detail="Only treasurers can approve this withdrawal")
+    elif member.role not in ("admin", "treasurer", "creator", "member"):
+        raise HTTPException(status_code=403, detail="You cannot approve this withdrawal")
+
     existing = await db.execute(
         select(WithdrawalApproval).where(
             WithdrawalApproval.withdrawal_id == withdrawal_id,
@@ -175,38 +268,57 @@ async def approve_withdrawal(
     if existing.scalar_one_or_none():
         raise HTTPException(status_code=400, detail="You have already voted on this withdrawal")
 
-    # Record approval
-    approval = WithdrawalApproval(
+    if not request.approved:
+        withdrawal.status = "rejected"
+        db.add(WithdrawalApproval(
+            withdrawal_id=withdrawal_id,
+            member_id=current_user.id,
+            approved=False,
+            channel="pwa"
+        ))
+        await db.commit()
+        return {
+            "message": "Withdrawal rejected",
+            "approved": False,
+            "status": "rejected",
+        }
+
+    db.add(WithdrawalApproval(
         withdrawal_id=withdrawal_id,
         member_id=current_user.id,
-        approved=request.approved,
+        approved=True,
         channel="pwa"
-    )
-    db.add(approval)
+    ))
+    withdrawal.approval_count += 1
+    await db.flush()
 
-    if request.approved:
-        withdrawal.approval_count += 1
+    disbursed = False
+    disburse_ref = None
 
-    await db.commit()
-
-    # Check if enough approvals
     if withdrawal.approval_count >= withdrawal.approval_required:
-        group = await db.get(Group, withdrawal.group_id)
-
         if group.agent_verification_required and withdrawal.amount >= group.withdrawal_threshold:
             withdrawal.status = "agent_pending"
-            # Notify agents (mock for now)
+            await db.commit()
         else:
             withdrawal.status = "approved"
-
+            withdrawal.approved_at = datetime.utcnow()
+            await db.flush()
+            result = await execute_disbursement(withdrawal, group, current_user.id, db)
+            disbursed = result.get("success", False)
+            disburse_ref = result.get("reference")
+            if not disbursed:
+                raise HTTPException(status_code=502, detail=result.get("error", "Disbursement failed"))
+    else:
         await db.commit()
 
     return {
         "message": "Approval recorded",
-        "approved": request.approved,
+        "approved": True,
         "approvals_received": withdrawal.approval_count,
         "approvals_required": withdrawal.approval_required,
-        "status": withdrawal.status
+        "status": withdrawal.status,
+        "disbursed": disbursed,
+        "transaction_ref": disburse_ref,
     }
 
 
@@ -224,7 +336,6 @@ async def agent_verify_withdrawal(
     if withdrawal.status != "agent_pending":
         raise HTTPException(status_code=400, detail="Withdrawal is not pending agent verification")
 
-    # Create agent verification record
     from app.models import AgentVerification
     verification = AgentVerification(
         withdrawal_id=withdrawal_id,
@@ -240,7 +351,6 @@ async def agent_verify_withdrawal(
     withdrawal.agent_id = request.agent_id
     withdrawal.agent_verified_at = datetime.utcnow()
     withdrawal.status = "verified"
-
     await db.commit()
 
     return {
@@ -257,67 +367,35 @@ async def disburse_withdrawal(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """Treasurer confirms disbursement after agent verification. Triggers MoMo send."""
+    """Trigger disbursement after agent verification (funds go to beneficiary)."""
     withdrawal = await db.get(Withdrawal, withdrawal_id)
     if not withdrawal:
         raise HTTPException(status_code=404, detail="Withdrawal not found")
 
-    # Verify requester is the original requester
-    if withdrawal.requested_by != current_user.id:
-        raise HTTPException(status_code=403, detail="Only the requester can trigger disbursement")
+    member_check = await db.execute(
+        select(GroupMember).where(
+            GroupMember.group_id == withdrawal.group_id,
+            GroupMember.user_id == current_user.id,
+            GroupMember.role.in_(["admin", "treasurer", "creator"])
+        )
+    )
+    if not member_check.scalar_one_or_none():
+        raise HTTPException(status_code=403, detail="Only treasurers can trigger disbursement")
 
     if withdrawal.status not in ["approved", "verified"]:
         raise HTTPException(status_code=400, detail=f"Withdrawal status is {withdrawal.status}, cannot disburse")
 
     group = await db.get(Group, withdrawal.group_id)
-
-    # Call MoMo disbursement
-    result = await momo_service.disburse_funds(
-        phone=current_user.phone,
-        amount=withdrawal.amount,
-        description=f"ADANSI withdrawal from {group.name}"
-    )
+    result = await execute_disbursement(withdrawal, group, current_user.id, db)
 
     if not result["success"]:
-        raise HTTPException(status_code=502, detail=f"Disbursement failed: {result.get('hubtel_response')}")
-
-    withdrawal.status = "completed"
-    withdrawal.disbursed_at = datetime.utcnow()
-    withdrawal.momo_disbursement_ref = result["reference"]
-
-    # Deduct from group balance
-    group.current_balance -= withdrawal.amount
-
-    # Create audit transaction
-    transaction = Transaction(
-        type="withdrawal",
-        reference=result["reference"],
-        amount=withdrawal.amount,
-        group_id=withdrawal.group_id,
-        user_id=current_user.id,
-        status="completed",
-        external_ref=result["reference"]
-    )
-    db.add(transaction)
-    db.add(AuditEvent(group_id=withdrawal.group_id, actor_id=current_user.id, event_type="withdrawal_settled", entity_type="withdrawal", entity_id=withdrawal.id, amount=withdrawal.amount, event_metadata={"reference": result["reference"], "external_ref": result["reference"]}))
-
-    await db.commit()
-
-    # Notify group members
-    for member in group.members:
-        user = await db.get(User, member.user_id)
-        if user:
-            await notification_service.send_withdrawal_completed(
-                phone=user.phone,
-                amount=float(withdrawal.amount),
-                group_name=group.name,
-                agent_id=withdrawal.agent_id or "N/A"
-            )
+        raise HTTPException(status_code=502, detail=result.get("error", "Disbursement failed"))
 
     return {
         "message": "Disbursement completed",
         "withdrawal_id": str(withdrawal_id),
         "amount": float(withdrawal.amount),
         "reference": result["reference"],
-        "status": "completed"
+        "beneficiary": result.get("beneficiary"),
+        "status": "disbursed",
     }

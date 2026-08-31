@@ -31,5 +31,5 @@ class User(Base):
     contributions = relationship("Contribution", back_populates="user")
     withdrawals_requested = relationship("Withdrawal", back_populates="requester", foreign_keys="Withdrawal.requested_by")
     credit_profile = relationship("CreditProfile", back_populates="user", uselist=False)
-    loans = relationship("Loan", back_populates="user")
+    loans = relationship("Loan", back_populates="user", foreign_keys="Loan.user_id")
     notifications = relationship("Notification", back_populates="user")

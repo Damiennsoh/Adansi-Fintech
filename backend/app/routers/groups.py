@@ -30,15 +30,19 @@ async def create_group(
     group = await group_service.create_group(
         name=request.name,
         type=request.type,
-        purpose=request.purpose,
+        purpose=request.get_purpose(),
         target_amount=request.target_amount,
         withdrawal_threshold=request.withdrawal_threshold,
         agent_verification_required=request.agent_verification_required,
-        contribution_frequency=request.contribution_frequency,
+        contribution_frequency=request.get_frequency(),
         contribution_amount=request.contribution_amount,
         created_by=current_user.id,
         approval_rule=request.approval_rule,
-        approval_timeout_hours=request.approval_timeout_hours
+        approval_timeout_hours=request.approval_timeout_hours,
+        auto_approve_limit=float(request.auto_approve_limit or 0),
+        join_type=request.join_type or "approval_required",
+        rotation_enabled=request.rotation_enabled,
+        rotation_queue=request.rotation_queue,
     )
     return group
 
@@ -134,7 +138,13 @@ async def review_join_request(group_id: UUID, request_id: UUID, approved: bool, 
     request = result.scalar_one_or_none()
     if not request or request.status != "pending": raise HTTPException(status_code=404, detail="Pending request not found")
     request.status = "approved" if approved else "rejected"; request.reviewed_by = current_user.id; request.reviewed_at = datetime.utcnow()
-    if approved: db.add(GroupMember(group_id=group_id, user_id=request.user_id, role="member"))
+    if approved:
+        db.add(GroupMember(group_id=group_id, user_id=request.user_id, role="member"))
+        group = await db.get(Group, group_id)
+        if group and group.rotation_enabled:
+            queue = list(group.rotation_queue or [])
+            queue.append({"user_id": str(request.user_id), "position": len(queue) + 1})
+            group.rotation_queue = queue
     db.add(AuditEvent(group_id=group_id, actor_id=current_user.id, event_type="join_approved" if approved else "join_rejected", entity_type="join_request", entity_id=request.id))
     await db.commit()
     return {"status": request.status}
@@ -142,12 +152,34 @@ async def review_join_request(group_id: UUID, request_id: UUID, approved: bool, 
 
 @router.post("/join-by-code")
 async def join_group_by_code(request: JoinGroupRequest, current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    """Join a group by short code."""
+    """Join a group by short code — respects join_type approval rules."""
     group = await group_service.get_group_by_code(request.code)
     if not group:
         raise HTTPException(status_code=404, detail="Group not found")
-    member = await group_service.join_group(group.id, current_user.id)
-    return {"message": f"Joined {group.name} successfully", "group_id": str(group.id)}
+
+    existing = await db.execute(
+        select(GroupMember).where(
+            GroupMember.group_id == group.id,
+            GroupMember.user_id == current_user.id
+        )
+    )
+    if existing.scalar_one_or_none():
+        return {"message": f"Already a member of {group.name}", "group_id": str(group.id), "status": "approved"}
+
+    join_type = getattr(group, "join_type", "approval_required") or "approval_required"
+
+    if join_type == "open":
+        member = await group_service.join_group(group.id, current_user.id)
+        return {"message": f"Joined {group.name} successfully", "group_id": str(group.id), "status": "approved"}
+
+    if join_type == "invite_only":
+        raise HTTPException(status_code=403, detail="This group is invite-only")
+
+    from app.models import GroupJoinRequest
+    jr = GroupJoinRequest(group_id=group.id, user_id=current_user.id)
+    db.add(jr)
+    await db.commit()
+    return {"message": "Join request submitted", "group_id": str(group.id), "status": "pending", "request_id": str(jr.id)}
 
 
 @router.post("/{group_id}/invite")

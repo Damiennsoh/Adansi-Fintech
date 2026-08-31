@@ -80,7 +80,7 @@ adansi-backend/
 │       ├── redis_service.py      # USSD sessions, rate limiting
 │       ├── notification_service.py # Twilio WhatsApp/SMS
 │       └── credit_service.py     # Rule-based scoring engine
-├── alembic/                 # Database migrations
+├── alembic/                 # Optional local dev migrations (see Database Migrations below)
 ├── tests/
 ├── requirements.txt
 ├── .env.example
@@ -136,6 +136,14 @@ adansi-backend/
 3. **Login**: `POST /api/v1/auth/login` → phone, PIN → returns JWT
 4. **Use API**: Include `Authorization: Bearer <token>` header
 5. **Rate limit**: 5 failed PIN attempts = 15-minute lockout
+
+## Database Migrations
+
+**Supabase is PostgreSQL.** The hosted database lives on Supabase; the FastAPI backend connects to it via `DATABASE_URL` (async SQLAlchemy).
+
+**Source of truth:** [`supabase/migrations/`](../supabase/migrations/) — apply with Supabase CLI (`npx supabase db push`) or the Supabase SQL Editor.
+
+**Why Alembic exists:** Alembic is SQLAlchemy’s migration runner, included for optional **local dev** when you run `init_db()` or experiment without Supabase. It is **not** a separate database — both tools target the same PostgreSQL instance. For production and team sync, use **Supabase migrations only** and treat Alembic as legacy/optional.
 
 ## Database
 

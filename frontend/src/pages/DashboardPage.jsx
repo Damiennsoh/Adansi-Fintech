@@ -16,7 +16,7 @@ export default function DashboardPage() {
 
   useRealtimeNotifications(profile?.id)
 
-  const totalBalance = groups.reduce((sum, g) => sum + (g.balance || 0), 0)
+  const totalBalance = groups.reduce((sum, g) => sum + (g.balance ?? g.current_balance ?? 0), 0)
   const recentTransactions = groups.flatMap(g => g.recent_transactions || []).slice(0, 5)
 
   return (
@@ -26,7 +26,7 @@ export default function DashboardPage() {
         <div className="flex justify-between items-center mb-6">
           <div>
             <p className="text-gray-400 text-sm">Total Balance</p>
-            <h1 className="text-3xl font-bold text-white">{formatCurrency(totalBalance)}</h1>
+            <h1 className="text-2xl sm:text-3xl font-bold text-white break-words">{formatCurrency(totalBalance)}</h1>
           </div>
           <Link to="/notifications" className="relative p-2 bg-white/10 rounded-full">
             <Bell className="w-5 h-5 text-white" />
@@ -64,11 +64,11 @@ export default function DashboardPage() {
             </h2>
             <Link to="/credit" className="text-sm text-adansi-primary font-medium">View Details</Link>
           </div>
-          <div className="flex items-center gap-4">
-            <div className="flex-1">
+          <div className="flex flex-col sm:flex-row items-center gap-4">
+            <div className="flex-shrink-0">
               <CreditScoreRing score={profile?.credit_score || 0} />
             </div>
-            <div className="flex-1 space-y-2">
+            <div className="w-full sm:flex-1 space-y-2 text-center sm:text-left">
               <div className="flex items-center gap-2">
                 <Wallet className="w-4 h-4 text-gray-400" />
                 <span className="text-sm text-gray-600">Loan Eligibility</span>

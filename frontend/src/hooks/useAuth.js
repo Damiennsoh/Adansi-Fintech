@@ -56,25 +56,41 @@ export function useAuth() {
 
   const loginWithPIN = useMutation({
     mutationFn: async ({ phone, pin }) => {
-      try {
-        const { data } = await api.post('/auth/login', { phone, pin })
-        setUser(data.user)
+      const { data } = await api.post('/auth/login', { phone, pin })
+      if (data.access_token) {
         setTokens(data.access_token, data.refresh_token)
-        return data.user
-      } catch (err) {
-        const demoUser = {
-          id: 'demo-user-123',
-          phone: phone || '+233240000000',
-          full_name: 'Damien Nsoh',
-          credit_score: 720,
-          total_contributed: 1500.00,
-          groups_count: 3,
-          is_verified: true
-        }
-        setUser(demoUser)
-        setTokens('demo-access-token', 'demo-refresh-token')
-        return demoUser
       }
+      try {
+        const { data: userData } = await api.get('/users/me')
+        setUser(userData)
+        return userData
+      } catch {
+        setUser({ phone, full_name: 'Member' })
+        return { phone }
+      }
+    },
+  })
+
+  const setupPIN = useMutation({
+    mutationFn: async ({ phone, pin }) => {
+      const { data } = await api.post('/auth/setup-pin', { phone, pin })
+      if (data.access_token) {
+        setTokens(data.access_token, data.refresh_token)
+      }
+      try {
+        const { data: userData } = await api.get('/users/me')
+        setUser(userData)
+      } catch {
+        setUser({ phone, full_name: localStorage.getItem('adansi_user_name') || 'Member' })
+      }
+      return data
+    },
+  })
+
+  const resetPIN = useMutation({
+    mutationFn: async ({ phone, otp, new_pin }) => {
+      const { data } = await api.post('/auth/reset-pin', { phone, otp, new_pin })
+      return data
     },
   })
 
@@ -90,6 +106,8 @@ export function useAuth() {
     sendOTP,
     verifyOTP,
     loginWithPIN,
+    setupPIN,
+    resetPIN,
     logout,
   }
 }

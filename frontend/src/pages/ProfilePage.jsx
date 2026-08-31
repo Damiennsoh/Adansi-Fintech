@@ -1,6 +1,6 @@
 import { useAuth } from '../hooks/useAuth'
 import { useAuthStore } from '../store/authStore'
-import { User, Phone, Shield, LogOut, ChevronRight, CreditCard, Bell, HelpCircle } from 'lucide-react'
+import { User, Phone, Shield, LogOut, ChevronRight, CreditCard, Bell, HelpCircle, Clock } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 
 export default function ProfilePage() {
@@ -16,6 +16,7 @@ export default function ProfilePage() {
   const isAdmin = user?.role === 'admin' || user?.role === 'super_admin' || import.meta.env.DEV
 
   const menuItems = [
+    { icon: Clock, label: 'Contribution History', desc: 'Track your payments & on-time rate', action: () => navigate('/history') },
     ...(isAdmin ? [{ icon: Shield, label: 'Admin Dashboard', desc: 'Platform overview & analytics', action: () => navigate('/admin') }] : []),
     { icon: CreditCard, label: 'My Ghana Card', desc: user?.ghana_card_number ? user.ghana_card_number : 'Verify your identity', action: () => {} },
     { icon: Bell, label: 'Notifications', desc: 'Push & SMS preferences', action: () => {} },

@@ -22,15 +22,19 @@ class GroupService:
     async def create_group(
         name: str,
         type: str,
-        purpose: Optional[str],
-        target_amount: Optional[float],
-        withdrawal_threshold: float,
-        agent_verification_required: bool,
-        contribution_frequency: Optional[str],
-        contribution_amount: Optional[float],
         created_by: UUID,
+        purpose: Optional[str] = None,
+        target_amount: Optional[float] = None,
+        withdrawal_threshold: float = 500.0,
+        agent_verification_required: bool = False,
+        contribution_frequency: Optional[str] = None,
+        contribution_amount: Optional[float] = None,
         approval_rule: str = "any_1_treasurer",
-        approval_timeout_hours: int = 24
+        approval_timeout_hours: int = 24,
+        auto_approve_limit: float = 0,
+        join_type: str = "approval_required",
+        rotation_enabled: bool = False,
+        rotation_queue: Optional[list] = None,
     ) -> Group:
         """Create a new group with auto-generated code."""
         async with AsyncSessionLocal() as session:
@@ -51,12 +55,16 @@ class GroupService:
                 contribution_frequency=contribution_frequency,
                 contribution_amount=contribution_amount,
                 approval_rule=approval_rule,
-                approval_timeout_hours=approval_timeout_hours
+                approval_timeout_hours=approval_timeout_hours,
+                auto_approve_limit=auto_approve_limit,
+                join_type=join_type,
+                rotation_enabled=rotation_enabled,
+                rotation_queue=rotation_queue or [],
             )
             session.add(group)
-            await session.flush()  # Get group.id
+            await session.flush()
 
-            # Creator is automatically admin
+            # Creator is admin (treasury signatory #1)
             member = GroupMember(
                 group_id=group.id,
                 user_id=created_by,
@@ -104,6 +112,12 @@ class GroupService:
 
             member = GroupMember(group_id=group_id, user_id=user_id, role="member")
             session.add(member)
+
+            group = await session.get(Group, group_id)
+            if group and group.rotation_enabled:
+                queue = list(group.rotation_queue or [])
+                queue.append({"user_id": str(user_id), "position": len(queue) + 1})
+                group.rotation_queue = queue
 
             # Increment user's group count
             user = await session.get(User, user_id)

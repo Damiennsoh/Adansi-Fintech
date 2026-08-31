@@ -12,6 +12,7 @@ from app.services.credit_service import credit_engine
 from app.services.notification_service import notification_service
 from app.schemas.contribution import ContributionCreateRequest, ContributionResponse, MomoCallbackPayload
 from app.models import Contribution, Group, GroupMember, User, Transaction, AuditEvent
+from app.services.history_service import mark_contribution_on_schedule, ensure_schedules_for_member
 
 router = APIRouter(prefix="/contributions", tags=["Contributions"])
 
@@ -44,7 +45,8 @@ async def create_contribution(
         user_id=current_user.id,
         amount=request.amount,
         method=request.method,
-        status="pending"
+        status="pending",
+        meta_data={"network": request.network},
     )
     db.add(contribution)
     await db.flush()  # Get ID without committing
@@ -60,7 +62,8 @@ async def create_contribution(
         phone=current_user.phone,
         amount=request.amount,
         description=f"ADANSI contribution to {group.name}",
-        callback_url=f"https://your-api.com/api/v1/contributions/webhook/hubtel"
+        callback_url=f"https://your-api.com/api/v1/contributions/webhook/hubtel",
+        network=request.network,
     )
 
     if not result["success"]:
@@ -147,6 +150,13 @@ async def verify_contribution(
         member.total_contributed += contribution.amount
         member.last_contribution_at = contribution.created_at
 
+    if group and group.contribution_amount and group.contribution_frequency:
+        await ensure_schedules_for_member(
+            db, contribution.group_id, contribution.user_id,
+            group.contribution_amount, group.contribution_frequency,
+        )
+    await mark_contribution_on_schedule(db, contribution)
+
     # Update user totals
     user = await db.get(User, contribution.user_id)
     user.total_contributed += contribution.amount
@@ -225,6 +235,13 @@ async def hubtel_callback(
         if member:
             member.total_contributed += contribution.amount
             member.last_contribution_at = contribution.created_at
+
+        if group and group.contribution_amount and group.contribution_frequency:
+            await ensure_schedules_for_member(
+                db, contribution.group_id, contribution.user_id,
+                group.contribution_amount, group.contribution_frequency,
+            )
+        await mark_contribution_on_schedule(db, contribution)
 
         # Update user totals
         user = await db.get(User, contribution.user_id)

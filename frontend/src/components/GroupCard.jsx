@@ -8,17 +8,24 @@ export default function GroupCard({ group }) {
       to={`/groups/${group.id}`}
       className="block bg-white rounded-2xl p-4 shadow-sm border border-gray-100 active:scale-[0.98] transition-transform"
     >
-      <div className="flex items-start justify-between">
-        <div className="flex items-center gap-3">
-          <div className={`w-12 h-12 rounded-xl ${getGroupColor(group.type)} flex items-center justify-center text-white font-bold text-lg`}>
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex items-center gap-3 min-w-0 flex-1">
+          <div className={`w-12 h-12 flex-shrink-0 rounded-xl ${getGroupColor(group.type)} flex items-center justify-center text-white font-bold text-lg`}>
             {group.name.charAt(0)}
           </div>
-          <div>
-            <h3 className="font-semibold text-gray-900">{group.name}</h3>
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+              <h3 className="font-semibold text-gray-900 break-words">{group.name}</h3>
+              {group.code && (
+                <span className="font-mono text-[10px] bg-adansi-secondary/10 text-adansi-secondary font-bold px-1.5 py-0.5 rounded border border-adansi-secondary/20 flex-shrink-0">
+                  {group.code}
+                </span>
+              )}
+            </div>
             <span className="text-xs text-gray-500 capitalize">{group.type} Group</span>
           </div>
         </div>
-        <ArrowUpRight className="w-5 h-5 text-gray-400" />
+        <ArrowUpRight className="w-5 h-5 text-gray-400 flex-shrink-0" />
       </div>
 
       <div className="mt-4 flex items-center justify-between">

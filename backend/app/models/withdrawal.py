@@ -21,6 +21,12 @@ class Withdrawal(Base):
     approval_count = Column(Integer, default=0)
     approval_required = Column(Integer, default=1)
     required_approvals_config = Column(Text, nullable=True)  # JSON representation of rules
+    # Direct Beneficiary Disbursement Fields (Hero Feature)
+    beneficiary_name = Column(String(255), nullable=True)
+    beneficiary_phone = Column(String(15), nullable=True)
+    beneficiary_network = Column(String(20), default="mtn")  # mtn, telecel, airteltigo
+    disbursement_method = Column(String(20), default="momo")  # momo, bank_transfer
+    beneficiary_bank_account = Column(String(50), nullable=True)
     expires_at = Column(DateTime(timezone=True), nullable=True)
     approved_at = Column(DateTime(timezone=True), nullable=True)
     agent_id = Column(String(50), nullable=True)  # MoMo agent ID

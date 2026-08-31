@@ -1,15 +1,9 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, Bell, CheckCircle2, ArrowDownLeft, ArrowUpRight, Info } from 'lucide-react'
 import { formatRelativeTime } from '../lib/utils'
-
-const mockNotifications = [
-  { id: 1, type: 'contribution', title: 'New Contribution', message: 'Amina contributed GHS 100 to Funeral Fund', time: '2026-08-29T12:30:00Z', read: false },
-  { id: 2, type: 'withdrawal', title: 'Withdrawal Request', message: 'Kofi requested GHS 500 from Wedding Fund', time: '2026-08-29T11:00:00Z', read: false },
-  { id: 3, type: 'approval', title: 'Approval Needed', message: 'Please approve the withdrawal from Health Group', time: '2026-08-28T16:00:00Z', read: true },
-  { id: 4, type: 'credit', title: 'Credit Score Updated', message: 'Your score increased by 15 points!', time: '2026-08-28T08:00:00Z', read: true },
-  { id: 5, type: 'info', title: 'Welcome to Adansi', message: 'Start by creating or joining a group', time: '2026-08-27T10:00:00Z', read: true },
-]
+import api from '../lib/api'
 
 const iconMap = {
   contribution: { icon: ArrowDownLeft, color: 'bg-green-50 text-green-600' },
@@ -19,13 +13,42 @@ const iconMap = {
   info: { icon: Info, color: 'bg-gray-50 text-gray-600' },
 }
 
+function mapNotification(n) {
+  const type = n.type || 'info'
+  return {
+    id: n.id,
+    type,
+    title: n.title || type,
+    message: n.body || n.message || '',
+    time: n.created_at,
+    read: n.read ?? false,
+  }
+}
+
 export default function NotificationsPage() {
   const navigate = useNavigate()
-  const [notifs, setNotifs] = useState(mockNotifications)
+  const queryClient = useQueryClient()
 
-  const markAllRead = () => {
-    setNotifs(notifs.map(n => ({ ...n, read: true })))
-  }
+  const { data: notifs = [], isLoading } = useQuery({
+    queryKey: ['notifications'],
+    queryFn: async () => {
+      const { data } = await api.get('/users/me/notifications')
+      return (data.notifications || []).map(mapNotification)
+    },
+  })
+
+  const markAllRead = useMutation({
+    mutationFn: async () => {
+      await Promise.all(
+        notifs.filter((n) => !n.read).map((n) =>
+          api.put(`/users/me/notifications/${n.id}/read`)
+        )
+      )
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['notifications'] })
+    },
+  })
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -37,39 +60,49 @@ export default function NotificationsPage() {
             </button>
             <h1 className="text-xl font-bold text-gray-900">Notifications</h1>
           </div>
-          <button onClick={markAllRead} className="text-sm text-adansi-primary font-medium">
+          <button
+            onClick={() => markAllRead.mutate()}
+            disabled={markAllRead.isPending || notifs.every((n) => n.read)}
+            className="text-sm text-adansi-primary font-medium disabled:opacity-50"
+          >
             Mark all read
           </button>
         </div>
       </div>
 
       <div className="px-5 py-4 space-y-3">
-        {notifs.map(n => {
-          const config = iconMap[n.type] || iconMap.info
-          const Icon = config.icon
-          return (
-            <div
-              key={n.id}
-              className={`bg-white rounded-2xl p-4 shadow-sm border ${
-                n.read ? 'border-gray-100' : 'border-adansi-primary/30 bg-adansi-primary/5'
-              }`}
-            >
-              <div className="flex items-start gap-3">
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${config.color}`}>
-                  <Icon className="w-5 h-5" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between">
-                    <p className="font-semibold text-gray-900 text-sm">{n.title}</p>
-                    <span className="text-[10px] text-gray-400">{formatRelativeTime(n.time)}</span>
+        {isLoading ? (
+          <p className="text-center text-sm text-gray-500 py-8">Loading...</p>
+        ) : notifs.length === 0 ? (
+          <p className="text-center text-sm text-gray-500 py-8">No notifications yet.</p>
+        ) : (
+          notifs.map((n) => {
+            const config = iconMap[n.type] || iconMap.info
+            const Icon = config.icon
+            return (
+              <div
+                key={n.id}
+                className={`bg-white rounded-2xl p-4 shadow-sm border ${
+                  n.read ? 'border-gray-100' : 'border-adansi-primary/30 bg-adansi-primary/5'
+                }`}
+              >
+                <div className="flex items-start gap-3">
+                  <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${config.color}`}>
+                    <Icon className="w-5 h-5" />
                   </div>
-                  <p className="text-sm text-gray-600 mt-0.5">{n.message}</p>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between">
+                      <p className="font-semibold text-gray-900 text-sm">{n.title}</p>
+                      <span className="text-[10px] text-gray-400">{formatRelativeTime(n.time)}</span>
+                    </div>
+                    <p className="text-sm text-gray-600 mt-0.5">{n.message}</p>
+                  </div>
+                  {!n.read && <div className="w-2 h-2 bg-adansi-primary rounded-full flex-shrink-0 mt-2" />}
                 </div>
-                {!n.read && <div className="w-2 h-2 bg-adansi-primary rounded-full flex-shrink-0 mt-2" />}
               </div>
-            </div>
-          )
-        })}
+            )
+          })
+        )}
       </div>
     </div>
   )

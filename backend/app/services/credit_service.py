@@ -8,7 +8,7 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import AsyncSessionLocal
-from app.models import User, Contribution, GroupMember, CreditProfile, Loan
+from app.models import User, Contribution, GroupMember, CreditProfile, Loan, Group
 from app.services.redis_service import redis_service
 
 

@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useEffect } from 'react'
 import { useAuthStore } from './store/authStore'
@@ -24,6 +24,7 @@ import DiasporaPage from './pages/DiasporaPage'
 import MarketplacePage from './pages/MarketplacePage'
 import AdminDashboardPage from './pages/AdminDashboardPage'
 import ProfileSetupPage from './pages/ProfileSetupPage'
+import ContributionHistoryPage from './pages/ContributionHistoryPage'
 import AgentVerifyMockPage from './pages/AgentVerifyMockPage'
 
 const queryClient = new QueryClient({
@@ -78,6 +79,7 @@ export default function App() {
               <Route path="/groups/:id/contribute" element={<ContributePage />} />
               <Route path="/groups/:id/withdraw" element={<WithdrawPage />} />
               <Route path="/credit" element={<CreditPage />} />
+              <Route path="/history" element={<ContributionHistoryPage />} />
               <Route path="/profile" element={<ProfilePage />} />
               <Route path="/notifications" element={<NotificationsPage />} />
               <Route path="/diaspora" element={<DiasporaPage />} />

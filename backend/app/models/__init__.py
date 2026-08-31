@@ -8,6 +8,7 @@ from app.models.credit import CreditProfile, Loan
 from app.models.agent import AgentVerification, InsurancePolicy
 from app.models.notification import Notification, UssdSession
 from app.models.mvp import GroupJoinRequest, AuditEvent, ExchangeRateQuote
+from app.models.schedules import ContributionSchedule, GroupMonthlySummary
 
 __all__ = [
     "User", "Group", "GroupMember", "JoinRequest",
@@ -16,5 +17,6 @@ __all__ = [
     "CreditProfile", "Loan",
     "AgentVerification", "InsurancePolicy",
     "Notification", "UssdSession",
-    "GroupJoinRequest", "AuditEvent", "ExchangeRateQuote"
+    "GroupJoinRequest", "AuditEvent", "ExchangeRateQuote",
+    "ContributionSchedule", "GroupMonthlySummary"
 ]

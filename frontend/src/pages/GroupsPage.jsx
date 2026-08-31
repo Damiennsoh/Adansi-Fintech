@@ -11,16 +11,19 @@ export default function GroupsPage() {
 
   const filteredGroups = groups.filter(group => {
     const matchesFilter = filter === 'all' || group.type === filter
-    const matchesSearch = group.name.toLowerCase().includes(search.toLowerCase())
+    const matchesSearch = 
+      group.name.toLowerCase().includes(search.toLowerCase()) ||
+      (group.code && group.code.toLowerCase().includes(search.toLowerCase()))
     return matchesFilter && matchesSearch
   })
 
   const filters = [
     { key: 'all', label: 'All' },
+    { key: 'business', label: 'Business' },
+    { key: 'savings', label: 'Savings / Susu' },
     { key: 'funeral', label: 'Funeral' },
     { key: 'wedding', label: 'Wedding' },
     { key: 'health', label: 'Health' },
-    { key: 'savings', label: 'Savings' },
     { key: 'investment', label: 'Investment' },
   ]
 
