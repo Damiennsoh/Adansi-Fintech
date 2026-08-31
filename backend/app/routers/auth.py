@@ -11,7 +11,7 @@ from app.services.redis_service import redis_service
 from app.schemas.auth import (
     UserRegisterRequest, UserLoginRequest, OtpVerifyRequest,
     TokenResponse, PinResetRequest, PinResetConfirmRequest,
-    GhanaCardVerifyRequest, PinSetupRequest
+    GhanaCardVerifyRequest, PinSetupRequest, RefreshTokenRequest
 )
 from app.models import User
 
@@ -117,6 +117,8 @@ async def verify_otp(request: OtpVerifyRequest, db: AsyncSession = Depends(get_d
 @router.post("/login", response_model=TokenResponse)
 async def login_user(request: UserLoginRequest, db: AsyncSession = Depends(get_db)):
     """Login with phone + PIN. Returns Supabase JWT tokens."""
+    print(f"Login attempt - Phone: {request.phone}, PIN: {request.pin}")
+    
     # Check rate limiting
     attempts = redis_service.get_pin_attempts(request.phone)
     if attempts >= 5:
@@ -125,22 +127,37 @@ async def login_user(request: UserLoginRequest, db: AsyncSession = Depends(get_d
     # Verify PIN against local hash
     user_result = await db.execute(select(User).where(User.phone == request.phone))
     user = user_result.scalar_one_or_none()
+    
+    print(f"User found: {user is not None}")
+    if user:
+        print(f"User phone: {user.phone}, PIN hash exists: {user.pin_hash is not None}")
 
     if not user or not auth_service.verify_pin(request.pin, user.pin_hash):
+        print(f"PIN verification failed")
         redis_service.set_pin_attempts(request.phone, attempts + 1)
         raise HTTPException(status_code=401, detail="Invalid phone or PIN")
 
     # Reset failed attempts
     redis_service.set_pin_attempts(request.phone, 0)
 
-    # Sign in with Supabase to get fresh tokens
+    # Try to sign in with Supabase to get fresh tokens
     supabase_result = await supabase_auth.sign_in_with_phone(
         phone=request.phone,
         password=request.pin
     )
 
+    # If Supabase auth fails, fall back to local JWT tokens (for testing)
     if not supabase_result["success"]:
-        raise HTTPException(status_code=401, detail="Authentication failed")
+        # Generate local JWT tokens as fallback
+        access_token = auth_service.create_access_token(user.id, user.phone)
+        refresh_token = auth_service.create_refresh_token(user.id)
+        
+        return TokenResponse(
+            access_token=access_token,
+            refresh_token=refresh_token,
+            token_type="bearer",
+            expires_in=900
+        )
 
     return TokenResponse(
         access_token=supabase_result["access_token"],
@@ -151,13 +168,13 @@ async def login_user(request: UserLoginRequest, db: AsyncSession = Depends(get_d
 
 
 @router.post("/refresh", response_model=TokenResponse)
-async def refresh_token(token: str):
+async def refresh_token(request: RefreshTokenRequest):
     """Refresh access token using refresh token."""
     # For Supabase, we would call supabase.auth.refresh_session()
     # For MVP: return the same token (client should handle re-login)
     return TokenResponse(
-        access_token=token,
-        refresh_token=token,
+        access_token=request.refresh_token,
+        refresh_token=request.refresh_token,
         token_type="bearer",
         expires_in=900
     )

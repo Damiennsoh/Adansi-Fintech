@@ -29,41 +29,73 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
         )
 
     token = credentials.credentials
+    payload = None
+    user_id = None
 
+    print(f"Auth middleware: Attempting to verify token")
+
+    # Try Supabase JWT first
     try:
-        # Verify JWT with Supabase secret
         payload = jwt.decode(
             token,
             settings.supabase_jwt_secret,
             algorithms=["HS256"],
             audience="authenticated"
         )
-
         user_id = payload.get("sub")
-        if not user_id:
-            raise HTTPException(status_code=401, detail="Invalid token: no user ID")
+        print(f"Auth middleware: Supabase JWT success, user_id: {user_id}")
+    except JWTError as e:
+        print(f"Auth middleware: Supabase JWT failed: {e}")
+        pass
 
-        # Fetch user from database
-        async with AsyncSessionLocal() as session:
+    # Fall back to local JWT if Supabase fails
+    if not user_id:
+        try:
+            payload = jwt.decode(
+                token,
+                settings.secret_key,
+                algorithms=["HS256"]
+            )
+            user_id = payload.get("sub")
+            print(f"Auth middleware: Local JWT success, user_id: {user_id}")
+        except JWTError as e:
+            print(f"Auth middleware: Local JWT failed: {e}")
+            pass
+
+    if not user_id:
+        print(f"Auth middleware: No valid user_id found in token")
+        raise HTTPException(status_code=401, detail="Invalid token: no user ID")
+
+    # Fetch user from database
+    async with AsyncSessionLocal() as session:
+        # Try by auth_user_id first (Supabase), then by id (local)
+        user = None
+        try:
             result = await session.execute(
                 select(User).where(User.auth_user_id == UUID(user_id))
             )
             user = result.scalar_one_or_none()
+            print(f"Auth middleware: User found by auth_user_id: {user is not None}")
+        except Exception as e:
+            print(f"Auth middleware: Error searching by auth_user_id: {e}")
+            user = None
+        
+        if not user:
+            result = await session.execute(
+                select(User).where(User.id == UUID(user_id))
+            )
+            user = result.scalar_one_or_none()
+            print(f"Auth middleware: User found by id: {user is not None}")
 
-            if not user:
-                raise HTTPException(status_code=404, detail="User not found")
+        if not user:
+            print(f"Auth middleware: User not found in database")
+            raise HTTPException(status_code=404, detail="User not found")
 
-            if not user.is_active:
-                raise HTTPException(status_code=403, detail="User account deactivated")
+        if not user.is_active:
+            raise HTTPException(status_code=403, detail="User account deactivated")
 
-            return user
-
-    except JWTError:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired token",
-            headers={"WWW-Authenticate": "Bearer"}
-        )
+        print(f"Auth middleware: Authentication successful for user {user.phone}")
+        return user
 
 
 async def get_current_user_optional(credentials: HTTPAuthorizationCredentials = Depends(security)) -> User | None:
