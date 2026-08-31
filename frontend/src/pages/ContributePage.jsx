@@ -1,28 +1,32 @@
 import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useContributions } from '../hooks/useContributions'
+import { useAuthStore } from '../store/authStore'
 import { ArrowLeft, Loader2, Wallet, Phone, CheckCircle2 } from 'lucide-react'
 import { formatCurrency } from '../lib/utils'
 import USSDModal from '../components/USSDModal'
+import NetworkSelector, { detectNetworkFromPhone } from '../components/NetworkSelector'
 
 const quickAmounts = [10, 50, 100, 200, 500, 1000]
 
 export default function ContributePage() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const { user } = useAuthStore()
   const { contribute } = useContributions()
   const [amount, setAmount] = useState('')
+  const [network, setNetwork] = useState(detectNetworkFromPhone(user?.phone || ''))
   const [showUSSD, setShowUSSD] = useState(false)
-  const [step, setStep] = useState('input') // input | confirm | processing | success
+  const [step, setStep] = useState('input')
 
   const handleContribute = async () => {
     setStep('processing')
     try {
-      await contribute.mutateAsync({ groupId: id, amount: parseFloat(amount) })
+      await contribute.mutateAsync({ groupId: id, amount: parseFloat(amount), network })
       setStep('success')
       setTimeout(() => navigate(`/groups/${id}`), 2000)
     } catch (err) {
-      alert('Contribution failed. Please try again.')
+      alert(err.response?.data?.detail || 'Contribution failed. Please try again.')
       setStep('input')
     }
   }
@@ -34,7 +38,7 @@ export default function ContributePage() {
           <CheckCircle2 className="w-10 h-10 text-green-600" />
         </div>
         <h2 className="text-xl font-bold text-gray-900 mb-2">Contribution Sent!</h2>
-        <p className="text-gray-500 text-center">You will receive an SMS confirmation shortly.</p>
+        <p className="text-gray-500 text-center">Confirm the MoMo prompt on your {network.toUpperCase()} wallet.</p>
       </div>
     )
   }
@@ -63,14 +67,14 @@ export default function ContributePage() {
       <div className="px-5 py-6 space-y-6">
         <div className="text-center">
           <p className="text-gray-500 text-sm mb-2">Enter Amount</p>
-          <div className="flex items-center justify-center gap-1">
-            <span className="text-2xl text-gray-400">GHS</span>
+          <div className="flex items-center justify-center gap-1 max-w-full">
+            <span className="text-xl sm:text-2xl text-gray-400 flex-shrink-0">GHS</span>
             <input
               type="number"
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
               placeholder="0.00"
-              className="text-5xl font-bold text-center w-48 bg-transparent focus:outline-none text-gray-900"
+              className="text-3xl sm:text-5xl font-bold text-center w-full max-w-[12rem] bg-transparent focus:outline-none text-gray-900"
               autoFocus
             />
           </div>
@@ -80,6 +84,7 @@ export default function ContributePage() {
           {quickAmounts.map(amt => (
             <button
               key={amt}
+              type="button"
               onClick={() => setAmount(amt.toString())}
               className={`py-3 rounded-xl font-semibold text-sm transition-colors ${
                 amount === amt.toString()
@@ -92,12 +97,14 @@ export default function ContributePage() {
           ))}
         </div>
 
+        <NetworkSelector value={network} onChange={setNetwork} />
+
         <div className="bg-blue-50 rounded-xl p-4 flex items-start gap-3">
           <Wallet className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
           <div>
-            <p className="text-sm font-medium text-blue-900">MoMo Payment</p>
+            <p className="text-sm font-medium text-blue-900">Cross-Network MoMo</p>
             <p className="text-xs text-blue-700 mt-1">
-              You will receive a prompt on your phone to confirm payment with your MoMo PIN.
+              Payment request sent to your {network.toUpperCase()} wallet. Confirm with your MoMo PIN.
             </p>
           </div>
         </div>
@@ -111,6 +118,7 @@ export default function ContributePage() {
         </button>
 
         <button
+          type="button"
           onClick={() => setShowUSSD(true)}
           className="w-full flex items-center justify-center gap-2 py-3 text-gray-500 text-sm"
         >

@@ -29,6 +29,11 @@ class TokenResponse(BaseModel):
     expires_in: int = 900  # 15 minutes
 
 
+class PinSetupRequest(BaseModel):
+    phone: str = Field(..., pattern=r"^\+233[0-9]{9}$")
+    pin: str = Field(..., min_length=4, max_length=6, pattern=r"^\d{4,6}$")
+
+
 class PinResetRequest(BaseModel):
     phone: str = Field(..., pattern=r"^\+233[0-9]{9}$")
 

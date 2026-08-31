@@ -2,7 +2,7 @@
 import uuid
 from datetime import datetime
 from sqlalchemy import Column, String, Text, Boolean, Integer, DateTime, DECIMAL, ForeignKey, Index
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
 from app.database import Base
 
@@ -28,9 +28,8 @@ class Group(Base):
     contribution_frequency = Column(String(20), nullable=True)  # daily, weekly, monthly, adhoc
     contribution_amount = Column(DECIMAL(10, 2), nullable=True)
     auto_insurance_enabled = Column(Boolean, default=False)
-    approval_rule = Column(String(30), default="any_1_treasurer", nullable=False)
-    auto_approve_limit = Column(DECIMAL(15, 2), default=0, nullable=False)
-    approval_timeout_hours = Column(Integer, default=24, nullable=False)
+    rotation_queue = Column(JSONB, default=list)
+    rotation_enabled = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
     updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
 

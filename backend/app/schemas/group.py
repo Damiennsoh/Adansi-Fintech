@@ -28,6 +28,8 @@ class GroupCreateRequest(BaseModel):
     approval_timeout_hours: int = Field(default=24, ge=1, le=168)
     auto_approve_limit: Optional[Decimal] = Field(default=0, ge=0)
     join_type: Optional[str] = Field(default="approval_required")
+    rotation_enabled: bool = False
+    rotation_queue: Optional[list] = None
 
     @field_validator("type")
     @classmethod
@@ -91,6 +93,10 @@ class GroupResponse(BaseModel):
     agent_verification_required: bool
     contribution_frequency: Optional[str]
     contribution_amount: Optional[Decimal]
+    approval_rule: str = "any_1_treasurer"
+    auto_approve_limit: Decimal = Decimal("0")
+    join_type: str = "approval_required"
+    rotation_enabled: bool = False
     created_at: datetime
     members: List[GroupMemberResponse] = []
 

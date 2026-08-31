@@ -25,7 +25,7 @@ export default function VerifyOTPPage() {
       const userRes = await verifyOTP.mutateAsync({ phone, otp, pin: isNewUser ? undefined : undefined })
 
       if (isReset) {
-        navigate('/setup-pin', { state: { phone, mode: 'reset' } })
+        navigate('/setup-pin', { state: { phone, mode: 'reset', otp } })
       } else if (isNewUser || !userRes?.full_name) {
         navigate('/setup-profile', { state: { phone } })
       } else {

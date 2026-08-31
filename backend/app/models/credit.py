@@ -48,7 +48,7 @@ class Loan(Base):
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
 
     # Relationships
-    user = relationship("User", back_populates="loans")
+    user = relationship("User", back_populates="loans", foreign_keys=[user_id])
     group = relationship("Group", back_populates="loans")
 
     __table_args__ = (

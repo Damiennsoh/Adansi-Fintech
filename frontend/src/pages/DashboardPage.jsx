@@ -16,7 +16,7 @@ export default function DashboardPage() {
 
   useRealtimeNotifications(profile?.id)
 
-  const totalBalance = groups.reduce((sum, g) => sum + (g.balance || 0), 0)
+  const totalBalance = groups.reduce((sum, g) => sum + (g.balance ?? g.current_balance ?? 0), 0)
   const recentTransactions = groups.flatMap(g => g.recent_transactions || []).slice(0, 5)
 
   return (
@@ -64,11 +64,11 @@ export default function DashboardPage() {
             </h2>
             <Link to="/credit" className="text-sm text-adansi-primary font-medium">View Details</Link>
           </div>
-          <div className="flex items-center gap-4">
-            <div className="flex-1">
+          <div className="flex flex-col sm:flex-row items-center gap-4">
+            <div className="flex-shrink-0">
               <CreditScoreRing score={profile?.credit_score || 0} />
             </div>
-            <div className="flex-1 space-y-2">
+            <div className="w-full sm:flex-1 space-y-2 text-center sm:text-left">
               <div className="flex items-center gap-2">
                 <Wallet className="w-4 h-4 text-gray-400" />
                 <span className="text-sm text-gray-600">Loan Eligibility</span>

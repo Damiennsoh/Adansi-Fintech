@@ -26,6 +26,7 @@ export default function CreateGroupPage() {
     approval_rule: 'any_1_treasurer',
     auto_approve_limit: 0,
     join_type: 'approval_required',
+    rotation_enabled: false,
   })
   const [createdGroup, setCreatedGroup] = useState(null)
   const [copied, setCopied] = useState(false)
@@ -45,6 +46,7 @@ export default function CreateGroupPage() {
         approval_rule: form.approval_rule,
         auto_approve_limit: form.auto_approve_limit || 0,
         join_type: form.join_type,
+        rotation_enabled: form.rotation_enabled,
         agent_verification_required: false,
       }
       const data = await createGroup.mutateAsync(payload)
@@ -263,6 +265,23 @@ export default function CreateGroupPage() {
             </div>
           </div>
         </div>
+
+        {form.type === 'savings' && (
+          <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4">
+            <label className="flex items-center gap-2.5 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={form.rotation_enabled}
+                onChange={(e) => setForm({ ...form, rotation_enabled: e.target.checked })}
+                className="w-4 h-4 text-adansi-primary rounded"
+              />
+              <span className="text-sm font-bold text-gray-900">Enable Rotating Payouts (Susu)</span>
+            </label>
+            <p className="text-xs text-gray-600 mt-2 pl-6">
+              Members take turns receiving the pooled amount each cycle. Queue is built as members join.
+            </p>
+          </div>
+        )}
 
         <button
           type="submit"

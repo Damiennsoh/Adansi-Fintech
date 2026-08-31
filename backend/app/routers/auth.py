@@ -10,7 +10,7 @@ from app.services.redis_service import redis_service
 from app.schemas.auth import (
     UserRegisterRequest, UserLoginRequest, OtpVerifyRequest,
     TokenResponse, PinResetRequest, PinResetConfirmRequest,
-    GhanaCardVerifyRequest
+    GhanaCardVerifyRequest, PinSetupRequest
 )
 from app.models import User
 
@@ -166,6 +166,34 @@ async def refresh_token(token: str):
         token_type="bearer",
         expires_in=900
     )
+
+
+@router.post("/setup-pin")
+async def setup_pin(request: PinSetupRequest, db: AsyncSession = Depends(get_db)):
+    """Set PIN during onboarding after profile setup."""
+    user_result = await db.execute(select(User).where(User.phone == request.phone))
+    user = user_result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found. Complete profile setup first.")
+
+    user.pin_hash = auth_service.hash_pin(request.pin)
+    user.is_verified = True
+    await db.commit()
+
+    supabase_result = await supabase_auth.sign_up_with_phone(
+        phone=request.phone,
+        password=request.pin
+    )
+
+    if supabase_result["success"]:
+        return TokenResponse(
+            access_token=supabase_result.get("access_token", ""),
+            refresh_token=supabase_result.get("refresh_token", ""),
+            token_type="bearer",
+            expires_in=900
+        )
+
+    return {"message": "PIN set successfully. Please login with your phone and PIN."}
 
 
 @router.post("/forgot-pin")

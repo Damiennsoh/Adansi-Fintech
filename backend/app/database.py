@@ -40,6 +40,6 @@ async def get_db():
 
 
 async def init_db():
-    """Create all tables (for dev only; use Alembic in production)."""
+    """Create all tables (dev only). Production schema: supabase/migrations/."""
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)

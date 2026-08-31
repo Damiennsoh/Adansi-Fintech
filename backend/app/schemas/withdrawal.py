@@ -10,6 +10,11 @@ class WithdrawalCreateRequest(BaseModel):
     group_id: UUID
     amount: Decimal = Field(..., ge=1, decimal_places=2)
     reason: str = Field(..., min_length=5, max_length=500)
+    beneficiary_name: Optional[str] = None
+    beneficiary_phone: Optional[str] = None
+    beneficiary_network: Optional[str] = Field(default="mtn", pattern=r"^(mtn|telecel|airteltigo)$")
+    disbursement_method: Optional[str] = Field(default="momo", pattern=r"^(momo|bank_transfer)$")
+    beneficiary_bank_account: Optional[str] = None
 
 
 class WithdrawalApprovalRequest(BaseModel):

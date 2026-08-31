@@ -1,16 +1,27 @@
 import { useState } from 'react'
-import { useParams, Link, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, Users, Copy, Share2, Phone, Wallet, ArrowUpRight, ArrowDownLeft, Clock, CheckCircle2 } from 'lucide-react'
 import { useGroupDetail } from '../hooks/useGroups'
+import { useWithdrawals } from '../hooks/useContributions'
 import { useRealtimeContributions } from '../hooks/useRealtime'
 import { formatCurrency, formatRelativeTime, getGroupColor } from '../lib/utils'
 import USSDModal from '../components/USSDModal'
 
+function ruleLabel(rule) {
+  if (rule === 'two_of_three_treasurers') return '2 of 3 Treasurers'
+  if (rule === 'majority_members') return 'Majority (51%)'
+  if (rule === 'unanimous_members') return 'Unanimous'
+  return 'Any 1 Treasurer'
+}
+
 export default function GroupDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const { group, transactions, auditEvents, joinRequests, reviewJoinRequest, members, isLoading } = useGroupDetail(id)
-  const [activeTab, setActiveTab] = useState('activity')
+  const [searchParams] = useSearchParams()
+  const initialTab = searchParams.get('tab') || 'activity'
+  const { group, transactions, auditEvents, joinRequests, pendingWithdrawals, reviewJoinRequest, members, isLoading } = useGroupDetail(id)
+  const { approveWithdrawal } = useWithdrawals()
+  const [activeTab, setActiveTab] = useState(initialTab)
   const [showUSSD, setShowUSSD] = useState(false)
   const [copied, setCopied] = useState(false)
 
@@ -29,6 +40,21 @@ export default function GroupDetailPage() {
     } else {
       navigator.clipboard.writeText(text)
       alert('Invite text copied to clipboard!')
+    }
+  }
+
+  const handleApproveWithdrawal = async (withdrawalId, approved) => {
+    try {
+      const result = await approveWithdrawal.mutateAsync({ withdrawalId, approved })
+      if (result.disbursed) {
+        alert(`Withdrawal approved and disbursed to beneficiary. Ref: ${result.transaction_ref || 'N/A'}`)
+      } else if (approved) {
+        alert(`Signature recorded (${result.approvals_received}/${result.approvals_required})`)
+      } else {
+        alert('Withdrawal declined.')
+      }
+    } catch (err) {
+      alert(err.response?.data?.detail || 'Action failed.')
     }
   }
 
@@ -52,10 +78,10 @@ export default function GroupDetailPage() {
   }
 
   const colorClass = getGroupColor(group.type)
+  const balance = group.balance ?? group.current_balance ?? 0
 
   return (
     <div className="min-h-screen bg-gray-50 pb-24">
-      {/* Header */}
       <div className={`${colorClass} px-5 pt-8 pb-6 text-white`}>
         <div className="flex items-center gap-3 mb-4">
           <button onClick={() => navigate('/groups')} className="p-2 bg-white/20 rounded-full">
@@ -69,14 +95,13 @@ export default function GroupDetailPage() {
 
         <div className="text-center mb-4">
           <p className="text-white/70 text-sm">Group Balance</p>
-          <p className="text-4xl font-bold">{formatCurrency(group.balance || 0)}</p>
+          <p className="text-2xl sm:text-4xl font-bold break-words">{formatCurrency(balance)}</p>
         </div>
 
-        {/* Treasury Rule Badge */}
-        <div className="flex items-center justify-center gap-1.5 bg-black/20 text-adansi-primary text-xs px-3 py-1.5 rounded-full w-fit mx-auto mb-3 font-medium border border-adansi-primary/30">
-          <span>🛡️ Rule: {group.approval_rule === 'two_of_three_treasurers' ? '2 of 3 Treasurers' : group.approval_rule === 'majority_members' ? 'Majority (51%)' : 'Any 1 Treasurer'}</span>
-          <span>•</span>
-          <span>Auto-Approve: {formatCurrency(group.auto_approve_limit || 0)}</span>
+        <div className="flex flex-col sm:flex-row sm:flex-wrap items-center justify-center gap-1 bg-black/20 text-adansi-primary text-xs px-3 py-2 rounded-xl w-full max-w-sm mx-auto mb-3 font-medium border border-adansi-primary/30 text-center">
+          <span>🛡️ {ruleLabel(group.approval_rule)}</span>
+          <span className="hidden sm:inline">•</span>
+          <span>Auto-approve: {formatCurrency(group.auto_approve_limit || 0)}</span>
         </div>
 
         <div className="flex items-center justify-center gap-2 text-white/80 text-sm">
@@ -86,7 +111,6 @@ export default function GroupDetailPage() {
           <span className="capitalize">{group.type}</span>
         </div>
 
-        {/* Join Code */}
         <div className="mt-4 bg-white/20 rounded-xl p-3 flex items-center justify-between">
           <div>
             <p className="text-xs text-white/70">Join Code</p>
@@ -98,7 +122,6 @@ export default function GroupDetailPage() {
         </div>
       </div>
 
-      {/* Action Buttons */}
       <div className="px-5 -mt-3">
         <div className="bg-white rounded-2xl shadow-sm p-4 flex gap-3">
           <button
@@ -122,96 +145,93 @@ export default function GroupDetailPage() {
         </div>
       </div>
 
-      {/* Pending Member Join Request Card (Admin View) */}
-      <div className="px-5 mt-4">
-        <div className="bg-yellow-50 border border-yellow-200 rounded-2xl p-4 space-y-3">
-          <div className="flex items-center justify-between">
+      {joinRequests.length > 0 && (
+        <div className="px-5 mt-4">
+          <div className="bg-yellow-50 border border-yellow-200 rounded-2xl p-4 space-y-3">
             <span className="text-xs font-bold text-yellow-900 flex items-center gap-1.5">
               <Users className="w-4 h-4 text-yellow-600" />
-              1 Pending Member Join Request
+              {joinRequests.length} Pending Join Request{joinRequests.length > 1 ? 's' : ''}
             </span>
-            <span className="text-[10px] bg-yellow-200/60 text-yellow-900 px-2 py-0.5 rounded-full font-bold">Admin Action</span>
-          </div>
-          <div className="flex items-center justify-between bg-white rounded-xl p-3 border border-yellow-100">
-            <div>
-              <p className="text-sm font-bold text-gray-900">Amina Owusu</p>
-              <p className="text-xs text-gray-500">+233 24 123 4567 • Requested 10m ago</p>
-            </div>
-            <div className="flex gap-2">
-              <button
-                onClick={() => alert('Member join request approved!')}
-                className="px-3 py-1.5 bg-green-600 text-white font-bold text-xs rounded-lg active:scale-95 transition-transform"
-              >
-                Approve
-              </button>
-              <button
-                onClick={() => alert('Member request declined.')}
-                className="px-3 py-1.5 bg-gray-200 text-gray-700 font-semibold text-xs rounded-lg active:scale-95 transition-transform"
-              >
-                Decline
-              </button>
-            </div>
+            {joinRequests.map((req) => (
+              <div key={req.id} className="flex items-center justify-between bg-white rounded-xl p-3 border border-yellow-100">
+                <div>
+                  <p className="text-sm font-bold text-gray-900">Member request</p>
+                  <p className="text-xs text-gray-500">{formatRelativeTime(req.created_at)}</p>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    disabled={reviewJoinRequest.isPending}
+                    onClick={() => reviewJoinRequest.mutate({ requestId: req.id, approved: true })}
+                    className="px-3 py-1.5 bg-green-600 text-white font-bold text-xs rounded-lg"
+                  >
+                    Approve
+                  </button>
+                  <button
+                    disabled={reviewJoinRequest.isPending}
+                    onClick={() => reviewJoinRequest.mutate({ requestId: req.id, approved: false })}
+                    className="px-3 py-1.5 bg-gray-200 text-gray-700 font-semibold text-xs rounded-lg"
+                  >
+                    Decline
+                  </button>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
-      </div>
+      )}
 
-      {/* Digital Multi-Signatory Withdrawal Approval Panel */}
-      <div className="px-5 mt-4">
-        <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 space-y-3">
-          <div className="flex items-center justify-between border-b border-gray-100 pb-2">
-            <span className="text-xs font-bold text-gray-900 flex items-center gap-1.5">
-              🛡️ Pending Withdrawal Approval
-            </span>
-            <span className="text-[10px] bg-purple-50 text-purple-700 font-bold px-2 py-0.5 rounded-full">
-              2 of 3 Treasurers Rule
-            </span>
-          </div>
-
-          <div className="space-y-2">
-            <div className="flex justify-between items-start">
-              <div>
-                <p className="text-sm font-bold text-gray-900">Kofi Mensah (Treasurer)</p>
-                <p className="text-xs text-gray-500">Reason: Coffin deposit & hearse booking</p>
+      {pendingWithdrawals.length > 0 && (
+        <div className="px-5 mt-4 space-y-3">
+          {pendingWithdrawals.map((w) => (
+            <div key={w.id} className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 space-y-3">
+              <div className="flex items-center justify-between border-b border-gray-100 pb-2">
+                <span className="text-xs font-bold text-gray-900">🛡️ Pending Withdrawal</span>
+                <span className="text-[10px] bg-purple-50 text-purple-700 font-bold px-2 py-0.5 rounded-full">
+                  {w.approval_count} of {w.approval_required} signatures
+                </span>
               </div>
-              <p className="text-sm font-bold text-red-600">-GHS 1,500.00</p>
-            </div>
-
-            <div className="space-y-1">
-              <div className="flex justify-between text-xs text-gray-600">
-                <span>Signatures Received:</span>
-                <span className="font-bold text-gray-900">1 of 2 Required</span>
+              <div className="flex flex-col gap-2 sm:flex-row sm:justify-between sm:items-start">
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-bold text-gray-900 break-words">{w.requester_name}</p>
+                  <p className="text-xs text-gray-500 break-words">{w.reason}</p>
+                  <p className="text-xs text-gray-500 mt-1 break-all">→ {w.beneficiary_name} ({w.beneficiary_phone})</p>
+                </div>
+                <p className="text-sm font-bold text-red-600 flex-shrink-0">-{formatCurrency(w.amount)}</p>
               </div>
               <div className="w-full bg-gray-100 rounded-full h-2">
-                <div className="bg-adansi-primary rounded-full h-2 w-1/2" />
+                <div
+                  className="bg-adansi-primary rounded-full h-2 transition-all"
+                  style={{ width: `${Math.min(100, (w.approval_count / w.approval_required) * 100)}%` }}
+                />
+              </div>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <button
+                  disabled={approveWithdrawal.isPending}
+                  onClick={() => handleApproveWithdrawal(w.id, true)}
+                  className="flex-1 py-2.5 bg-adansi-primary text-adansi-secondary font-bold text-xs rounded-xl"
+                >
+                  Approve & Sign
+                </button>
+                <button
+                  disabled={approveWithdrawal.isPending}
+                  onClick={() => handleApproveWithdrawal(w.id, false)}
+                  className="sm:px-4 py-2.5 bg-gray-100 text-gray-600 font-semibold text-xs rounded-xl"
+                >
+                  Decline
+                </button>
               </div>
             </div>
-
-            <div className="flex gap-2 pt-2">
-              <button
-                onClick={() => alert('Digital signature recorded! 2 of 2 signatures collected. Withdrawal disbursed via Hubtel MoMo.')}
-                className="flex-1 py-2.5 bg-adansi-primary text-adansi-secondary font-bold text-xs rounded-xl active:scale-95 transition-transform"
-              >
-                Approve & Sign Digitally
-              </button>
-              <button
-                onClick={() => alert('Withdrawal request declined.')}
-                className="px-4 py-2.5 bg-gray-100 text-gray-600 font-semibold text-xs rounded-xl"
-              >
-                Decline
-              </button>
-            </div>
-          </div>
+          ))}
         </div>
-      </div>
+      )}
 
-      {/* Tabs */}
       <div className="px-5 mt-6">
-        <div className="flex bg-gray-100 rounded-xl p-1">
-          {['activity', 'audit', 'members', ...(joinRequests.length ? ['requests'] : [])].map(tab => (
+        <div className="flex gap-1 overflow-x-auto bg-gray-100 rounded-xl p-1 scrollbar-hide">
+          {['activity', 'audit', 'members', ...(joinRequests.length ? ['requests'] : [])].map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
-              className={`flex-1 py-2 text-sm font-medium rounded-lg capitalize transition-colors ${
+              className={`flex-shrink-0 min-w-[4.5rem] px-3 py-2 text-xs sm:text-sm font-medium rounded-lg capitalize transition-colors whitespace-nowrap ${
                 activeTab === tab ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'
               }`}
             >
@@ -221,14 +241,13 @@ export default function GroupDetailPage() {
         </div>
       </div>
 
-      {/* Content */}
       <div className="px-5 mt-4">
         {activeTab === 'requests' ? (
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
             {joinRequests.map((request) => (
               <div key={request.id} className="flex items-center gap-3 p-4 border-b border-gray-50 last:border-0">
                 <div className="w-10 h-10 rounded-full bg-adansi-primary/20 flex items-center justify-center"><Users className="w-5 h-5 text-adansi-secondary" /></div>
-                <div className="flex-1"><p className="text-sm font-medium text-gray-900">New member request</p><p className="text-xs text-gray-500">{request.user_id} • {formatRelativeTime(request.created_at)}</p></div>
+                <div className="flex-1"><p className="text-sm font-medium text-gray-900">Join request</p><p className="text-xs text-gray-500">{formatRelativeTime(request.created_at)}</p></div>
                 <button disabled={reviewJoinRequest.isPending} onClick={() => reviewJoinRequest.mutate({ requestId: request.id, approved: false })} className="px-2 py-1.5 text-xs font-semibold text-red-600 bg-red-50 rounded-lg">Reject</button>
                 <button disabled={reviewJoinRequest.isPending} onClick={() => reviewJoinRequest.mutate({ requestId: request.id, approved: true })} className="px-2 py-1.5 text-xs font-semibold text-adansi-secondary bg-adansi-primary rounded-lg">Approve</button>
               </div>
@@ -240,37 +259,21 @@ export default function GroupDetailPage() {
               <div className="text-center py-8">
                 <Wallet className="w-12 h-12 text-gray-200 mx-auto mb-3" />
                 <p className="text-gray-500 text-sm">No transactions yet</p>
-                <p className="text-gray-400 text-xs mt-1">Be the first to contribute!</p>
               </div>
             ) : (
               <div className="divide-y divide-gray-100">
                 {transactions.map((tx, i) => (
-                  <div key={i} className="flex items-center gap-3 py-3 px-4">
-                    <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                      tx.type === 'contribution' ? 'bg-green-50' : 'bg-red-50'
-                    }`}>
-                      {tx.type === 'contribution' ? (
-                        <ArrowDownLeft className="w-5 h-5 text-green-600" />
-                      ) : (
-                        <ArrowUpRight className="w-5 h-5 text-red-600" />
-                      )}
+                  <div key={tx.id || i} className="flex items-center gap-3 py-3 px-4">
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center bg-green-50`}>
+                      <ArrowDownLeft className="w-5 h-5 text-green-600" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="font-medium text-gray-900 text-sm">
-                        {tx.type === 'contribution' ? 'Contribution' : 'Withdrawal'}
-                      </p>
-                      <p className="text-xs text-gray-500">
-                        {tx.member_name || 'Unknown'} • {formatRelativeTime(tx.created_at)}
-                      </p>
+                      <p className="font-medium text-gray-900 text-sm">Contribution</p>
+                      <p className="text-xs text-gray-500">{formatRelativeTime(tx.created_at)}</p>
                     </div>
                     <div className="text-right">
-                      <p className={`font-semibold text-sm ${tx.type === 'contribution' ? 'text-green-600' : 'text-red-600'}`}>
-                        {tx.type === 'contribution' ? '+' : '-'}{formatCurrency(tx.amount)}
-                      </p>
-                      <span className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full ${
-                        tx.status === 'completed' ? 'bg-green-50 text-green-600' : 'bg-yellow-50 text-yellow-600'
-                      }`}>
-                        {tx.status === 'completed' ? <CheckCircle2 className="w-3 h-3" /> : <Clock className="w-3 h-3" />}
+                      <p className="font-semibold text-sm text-green-600">+{formatCurrency(tx.amount)}</p>
+                      <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-green-50 text-green-600">
                         {tx.status}
                       </span>
                     </div>
@@ -292,16 +295,16 @@ export default function GroupDetailPage() {
         ) : (
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
             {members.map((member, i) => (
-              <div key={i} className="flex items-center gap-3 py-3 px-4 border-b border-gray-50 last:border-0">
+              <div key={member.id || i} className="flex items-center gap-3 py-3 px-4 border-b border-gray-50 last:border-0">
                 <div className="w-10 h-10 rounded-full bg-adansi-secondary text-white flex items-center justify-center font-bold text-sm">
-                  {member.name?.charAt(0) || '?'}
+                  {(member.name || member.full_name || '?').charAt(0)}
                 </div>
                 <div className="flex-1">
-                  <p className="font-medium text-gray-900 text-sm">{member.name || 'Unknown'}</p>
+                  <p className="font-medium text-gray-900 text-sm">{member.name || member.full_name || 'Member'}</p>
                   <p className="text-xs text-gray-500">{member.phone || ''}</p>
                 </div>
                 <span className={`text-[10px] font-semibold px-2 py-1 rounded-full ${
-                  member.role === 'admin' ? 'bg-adansi-primary/20 text-adansi-secondary' : 'bg-gray-100 text-gray-600'
+                  member.role === 'admin' || member.role === 'treasurer' ? 'bg-adansi-primary/20 text-adansi-secondary' : 'bg-gray-100 text-gray-600'
                 }`}>
                   {member.role || 'member'}
                 </span>

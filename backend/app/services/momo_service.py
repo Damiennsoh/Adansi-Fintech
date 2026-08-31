@@ -31,12 +31,22 @@ class MomoService:
         """Generate unique internal transaction reference."""
         return f"{prefix}-{uuid.uuid4().hex[:8].upper()}"
 
+    _NETWORK_CHANNELS = {
+        "mtn": "mtn-gh",
+        "telecel": "vodafone-gh",
+        "airteltigo": "tigo-gh",
+    }
+
+    def _channel_for_network(self, network: str) -> str:
+        return self._NETWORK_CHANNELS.get(network, "mtn-gh")
+
     async def request_payment(
         self,
         phone: str,
         amount: Decimal,
         description: str,
-        callback_url: Optional[str] = None
+        callback_url: Optional[str] = None,
+        network: str = "mtn",
     ) -> Dict[str, Any]:
         """Request money from a user's MoMo wallet (collections)."""
         if not callback_url:
@@ -47,7 +57,7 @@ class MomoService:
             "CustomerName": "ADANSI User",
             "CustomerMsisdn": phone,
             "CustomerEmail": "user@adansi.app",
-            "Channel": "mtn-gh",
+            "Channel": self._channel_for_network(network),
             "Amount": float(amount),
             "PrimaryCallbackUrl": callback_url,
             "Description": description,
@@ -73,7 +83,8 @@ class MomoService:
         phone: str,
         amount: Decimal,
         description: str,
-        callback_url: Optional[str] = None
+        callback_url: Optional[str] = None,
+        network: str = "mtn",
     ) -> Dict[str, Any]:
         """Send money to a user's MoMo wallet (disbursements)."""
         if not callback_url:
@@ -84,7 +95,7 @@ class MomoService:
             "RecipientName": "ADANSI User",
             "RecipientMsisdn": phone,
             "RecipientEmail": "user@adansi.app",
-            "Channel": "mtn-gh",
+            "Channel": self._channel_for_network(network),
             "Amount": float(amount),
             "PrimaryCallbackUrl": callback_url,
             "Description": description,

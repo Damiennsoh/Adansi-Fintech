@@ -5,8 +5,8 @@ export function useContributions() {
   const queryClient = useQueryClient()
 
   const contribute = useMutation({
-    mutationFn: async ({ groupId, amount }) => {
-      const { data } = await api.post('/contributions', { group_id: groupId, amount })
+    mutationFn: async ({ groupId, amount, network = 'mtn' }) => {
+      const { data } = await api.post('/contributions', { group_id: groupId, amount, network })
       return data
     },
     onSuccess: (_, variables) => {
@@ -30,12 +30,26 @@ export function useWithdrawals() {
   const queryClient = useQueryClient()
 
   const requestWithdrawal = useMutation({
-    mutationFn: async ({ groupId, amount, reason }) => {
-      const { data } = await api.post('/withdrawals', { group_id: groupId, amount, reason })
+    mutationFn: async ({
+      groupId, amount, reason,
+      beneficiary_name, beneficiary_phone, beneficiary_network,
+      disbursement_method, beneficiary_bank_account,
+    }) => {
+      const { data } = await api.post('/withdrawals', {
+        group_id: groupId,
+        amount,
+        reason,
+        beneficiary_name,
+        beneficiary_phone,
+        beneficiary_network,
+        disbursement_method,
+        beneficiary_bank_account,
+      })
       return data
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['group', variables.groupId] })
+      queryClient.invalidateQueries({ queryKey: ['pending-withdrawals', variables.groupId] })
     },
   })
 
@@ -46,6 +60,7 @@ export function useWithdrawals() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['groups'] })
+      queryClient.invalidateQueries({ queryKey: ['pending-withdrawals'] })
     },
   })
 

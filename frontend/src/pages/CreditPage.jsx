@@ -14,6 +14,12 @@ const scoreFactors = [
   { key: 'behavior', label: 'Behavior', weight: 5, desc: 'Repayment & approval history' },
 ]
 
+const partnerLenders = [
+  { id: 1, name: 'Nsoatreman Rural Bank', maxLoan: 50000, rate: 12, minScore: 600, status: 'coming_soon' },
+  { id: 2, name: 'Sinapi Aba Savings & Loans', maxLoan: 30000, rate: 15, minScore: 500, status: 'coming_soon' },
+  { id: 3, name: 'Adansi Micro-Credit', maxLoan: 10000, rate: 10, minScore: 450, status: 'coming_soon' },
+]
+
 export default function CreditPage() {
   const { creditProfile, isLoading } = useCredit()
   const [showLoanForm, setShowLoanForm] = useState(false)
@@ -37,9 +43,9 @@ export default function CreditPage() {
     <div className="min-h-screen bg-gray-50 pb-20">
       <div className="bg-adansi-secondary px-5 pt-8 pb-6">
         <h1 className="text-xl font-bold text-white mb-6">Credit Score</h1>
-        <div className="flex items-center gap-6">
+        <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-6">
           <CreditScoreRing score={creditProfile?.score || 0} />
-          <div className="flex-1 space-y-3">
+          <div className="w-full sm:flex-1 space-y-3 text-center sm:text-left">
             <div>
               <p className="text-gray-400 text-xs">Loan Eligibility</p>
               <p className="text-2xl font-bold text-white">{formatCurrency(creditProfile?.loan_eligibility || 0)}</p>
@@ -107,6 +113,39 @@ export default function CreditPage() {
           <div className="mt-3 flex items-start gap-2 text-xs text-gray-500">
             <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
             <p>3+ group members vouching drops your rate to 3% and boosts limit by 25%.</p>
+          </div>
+        </div>
+
+        {/* Partner Lenders (Mock for Demo) */}
+        <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
+          <h2 className="font-bold text-gray-900 mb-1">Partner Lenders</h2>
+          <p className="text-xs text-gray-500 mb-4">Your social credit score unlocks loans from verified lenders</p>
+          <div className="space-y-3">
+            {partnerLenders.map((lender) => {
+              const eligible = (creditProfile?.score || 0) >= lender.minScore
+              return (
+                <div key={lender.id} className="border border-gray-100 rounded-xl p-4">
+                  <div className="flex justify-between items-start mb-2">
+                    <h3 className="font-bold text-gray-900 text-sm">{lender.name}</h3>
+                    {lender.status === 'coming_soon' && (
+                      <span className="text-[10px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full font-semibold">Coming Soon</span>
+                    )}
+                  </div>
+                  <p className="text-xs text-gray-600">Max: {formatCurrency(lender.maxLoan)} • {lender.rate}% / year • Min score: {lender.minScore}</p>
+                  <div className="flex items-center justify-between mt-3">
+                    <span className={`text-xs font-bold px-2 py-1 rounded-full ${eligible ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                      {eligible ? 'Eligible' : `Requires ${lender.minScore}+`}
+                    </span>
+                    <button
+                      disabled={!eligible}
+                      className="text-xs font-bold px-3 py-1.5 rounded-lg bg-adansi-primary text-adansi-secondary disabled:opacity-40"
+                    >
+                      {eligible ? 'Apply' : 'Locked'}
+                    </button>
+                  </div>
+                </div>
+              )
+            })}
           </div>
         </div>
 
