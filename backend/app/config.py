@@ -25,9 +25,9 @@ class Settings(BaseSettings):
     redis_url: str = Field(alias="REDIS_URL")
 
     # Hubtel (MoMo)
-    hubtel_client_id: str = Field(alias="HUBTEL_CLIENT_ID")
-    hubtel_client_secret: str = Field(alias="HUBTEL_CLIENT_SECRET")
-    hubtel_merchant_id: str = Field(alias="HUBTEL_MERCHANT_ID")
+    hubtel_client_id: str | None = Field(default=None, alias="HUBTEL_CLIENT_ID")
+    hubtel_client_secret: str | None = Field(default=None, alias="HUBTEL_CLIENT_SECRET")
+    hubtel_merchant_id: str | None = Field(default=None, alias="HUBTEL_MERCHANT_ID")
     hubtel_base_url: str = Field(default="https://api.hubtel.com/v1", alias="HUBTEL_BASE_URL")
 
     # Twilio

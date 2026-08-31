@@ -15,7 +15,7 @@ from app.schemas.group import (
     GroupCreateRequest, GroupResponse, GroupListResponse,
     JoinGroupRequest, InviteMemberRequest
 )
-from app.models import Group, GroupMember, User, Contribution, AuditEvent, GroupJoinRequest
+from app.models import Group, GroupMember, User, Contribution, AuditEvent, JoinRequest
 
 router = APIRouter(prefix="/groups", tags=["Groups"])
 
@@ -110,7 +110,7 @@ async def join_group(group_id: UUID, current_user: User = Depends(get_current_us
     existing = await db.execute(select(GroupMember).where(GroupMember.group_id == group_id, GroupMember.user_id == current_user.id))
     if existing.scalar_one_or_none():
         return {"message": "Already a member", "status": "approved"}
-    request = GroupJoinRequest(group_id=group_id, user_id=current_user.id)
+    request = JoinRequest(group_id=group_id, user_id=current_user.id)
     db.add(request)
     db.add(AuditEvent(group_id=group_id, actor_id=current_user.id, event_type="join_requested", entity_type="join_request", entity_id=request.id))
     await db.commit()
@@ -127,17 +127,17 @@ async def get_group_audit(group_id: UUID, current_user: User = Depends(get_curre
 async def get_join_requests(group_id: UUID, current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     admin = await db.execute(select(GroupMember).where(GroupMember.group_id == group_id, GroupMember.user_id == current_user.id, GroupMember.role.in_(["admin", "treasurer"])))
     if not admin.scalar_one_or_none(): raise HTTPException(status_code=403, detail="Only group admins can review requests")
-    result = await db.execute(select(GroupJoinRequest).where(GroupJoinRequest.group_id == group_id, GroupJoinRequest.status == "pending"))
-    return {"requests": [{"id": str(r.id), "user_id": str(r.user_id), "status": r.status, "created_at": r.created_at} for r in result.scalars().all()]}
+    result = await db.execute(select(JoinRequest).where(JoinRequest.group_id == group_id, JoinRequest.status == "pending"))
+    return {"requests": [{"id": str(r.id), "user_id": str(r.user_id), "status": r.status, "created_at": r.requested_at} for r in result.scalars().all()]}
 
 @router.post("/{group_id}/join-requests/{request_id}/review")
 async def review_join_request(group_id: UUID, request_id: UUID, approved: bool, current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     admin = await db.execute(select(GroupMember).where(GroupMember.group_id == group_id, GroupMember.user_id == current_user.id, GroupMember.role == "admin"))
     if not admin.scalar_one_or_none(): raise HTTPException(status_code=403, detail="Only admins can review requests")
-    result = await db.execute(select(GroupJoinRequest).where(GroupJoinRequest.id == request_id, GroupJoinRequest.group_id == group_id))
+    result = await db.execute(select(JoinRequest).where(JoinRequest.id == request_id, JoinRequest.group_id == group_id))
     request = result.scalar_one_or_none()
     if not request or request.status != "pending": raise HTTPException(status_code=404, detail="Pending request not found")
-    request.status = "approved" if approved else "rejected"; request.reviewed_by = current_user.id; request.reviewed_at = datetime.utcnow()
+    request.status = "approved" if approved else "rejected"; request.responded_by = current_user.id; request.responded_at = datetime.utcnow()
     if approved:
         db.add(GroupMember(group_id=group_id, user_id=request.user_id, role="member"))
         group = await db.get(Group, group_id)
@@ -175,8 +175,8 @@ async def join_group_by_code(request: JoinGroupRequest, current_user: User = Dep
     if join_type == "invite_only":
         raise HTTPException(status_code=403, detail="This group is invite-only")
 
-    from app.models import GroupJoinRequest
-    jr = GroupJoinRequest(group_id=group.id, user_id=current_user.id)
+    from app.models import JoinRequest
+    jr = JoinRequest(group_id=group.id, user_id=current_user.id)
     db.add(jr)
     await db.commit()
     return {"message": "Join request submitted", "group_id": str(group.id), "status": "pending", "request_id": str(jr.id)}
@@ -235,7 +235,16 @@ async def update_member_role(
     if not member:
         raise HTTPException(status_code=404, detail="Member not found")
 
+    if role not in {"admin", "treasurer", "member"}:
+        raise HTTPException(status_code=400, detail="Role must be admin, treasurer, or member")
+
+    if member.role == "admin" and role != "admin":
+        admin_count = await db.scalar(select(func.count()).select_from(GroupMember).where(GroupMember.group_id == group_id, GroupMember.role == "admin"))
+        if (admin_count or 0) <= 1:
+            raise HTTPException(status_code=400, detail="A group must always have at least one admin")
+
     member.role = role
+    db.add(AuditEvent(group_id=group_id, actor_id=current_user.id, event_type="member_role_updated", entity_type="group_member", entity_id=member.id, event_metadata={"target_user_id": str(user_id), "role": role}))
     await db.commit()
     return {"message": "Role updated", "user_id": str(user_id), "new_role": role}
 
@@ -268,7 +277,13 @@ async def remove_member(
     if not member:
         raise HTTPException(status_code=404, detail="Member not found")
 
+    if member.role == "admin":
+        admin_count = await db.scalar(select(func.count()).select_from(GroupMember).where(GroupMember.group_id == group_id, GroupMember.role == "admin"))
+        if (admin_count or 0) <= 1:
+            raise HTTPException(status_code=400, detail="A group must always have at least one admin")
+
     await db.delete(member)
+    db.add(AuditEvent(group_id=group_id, actor_id=current_user.id, event_type="member_removed", entity_type="group_member", entity_id=member.id, event_metadata={"target_user_id": str(user_id)}))
     await db.commit()
     return {"message": "Member removed", "user_id": str(user_id)}
 

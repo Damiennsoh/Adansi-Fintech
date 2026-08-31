@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.database import get_db
+from app.middleware.auth import get_current_user
 from app.services.auth_service import auth_service
 from app.services.supabase_client import supabase_auth
 from app.services.redis_service import redis_service
@@ -55,22 +56,16 @@ async def register_user(request: UserRegisterRequest, db: AsyncSession = Depends
 
 @router.patch("/profile")
 async def update_profile(
-    phone: str,
     full_name: str,
     ghana_card_number: str | None = None,
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """Update profile during onboarding (capture full_name and optional Ghana Card)."""
-    user_result = await db.execute(select(User).where(User.phone == phone))
-    user = user_result.scalar_one_or_none()
-    if not user:
-        # Auto-create user record if not present
-        user = User(phone=phone, full_name=full_name, ghana_card_number=ghana_card_number)
-        db.add(user)
-    else:
-        user.full_name = full_name
-        if ghana_card_number:
-            user.ghana_card_number = ghana_card_number
+    """Update the authenticated user's onboarding profile."""
+    user = current_user
+    user.full_name = full_name.strip()
+    if ghana_card_number:
+        user.ghana_card_number = ghana_card_number.strip().upper()
 
     await db.commit()
     await db.refresh(user)
