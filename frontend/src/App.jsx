@@ -39,9 +39,8 @@ const queryClient = new QueryClient({
 
 function AdminRoute({ children }) {
   const { user } = useAuthStore()
-  if (user?.role !== 'admin' && user?.role !== 'super_admin' && !import.meta.env.DEV) {
-    return <Navigate to="/dashboard" replace />
-  }
+  const isPlatformAdmin = user?.role === 'platform_admin' || user?.role === 'super_admin'
+  if (!isPlatformAdmin) return <Navigate to="/dashboard" replace />
   return children
 }
 

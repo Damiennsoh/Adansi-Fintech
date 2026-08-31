@@ -8,11 +8,11 @@ import {
 } from 'lucide-react'
 import { formatCurrency } from '../lib/utils'
 
-const exchangeRates = {
-  USD: { rate: 15.5, flag: '🇺🇸' },
-  GBP: { rate: 19.8, flag: '🇬🇧' },
-  EUR: { rate: 16.9, flag: '🇪🇺' },
-  CAD: { rate: 11.4, flag: '🇨🇦' },
+const currencies = {
+  USD: { flag: 'US' },
+  GBP: { flag: 'GB' },
+  EUR: { flag: 'EU' },
+  CAD: { flag: 'CA' },
 }
 
 
@@ -28,21 +28,18 @@ export default function DiasporaPage() {
   const ratesQuery = useQuery({
     queryKey: ['exchange-rates'],
     queryFn: async () => {
-      const entries = await Promise.all(Object.keys(exchangeRates).map(async (base) => {
-        try {
-          const { data } = await api.get(`/rates/${base}`)
-          return [base, { ...exchangeRates[base], rate: Number(data.rate), fetchedAt: data.fetched_at }]
-        } catch (err) {
-          return [base, exchangeRates[base]]
-        }
+      const entries = await Promise.all(Object.keys(currencies).map(async (base) => {
+        const { data } = await api.get(`/rates/${base}`)
+        return [base, { ...currencies[base], rate: Number(data.rate), quoteId: data.quote_id, fetchedAt: data.fetched_at, expiresAt: data.expires_at, cached: data.cached }]
       }))
       return Object.fromEntries(entries)
     },
     staleTime: 10 * 60 * 1000,
   })
-  const liveRates = ratesQuery.data || exchangeRates
-  const rate = liveRates[currency].rate
-  const foreignAmount = amountGHS ? (parseFloat(amountGHS) / rate).toFixed(2) : '0.00'
+  const liveRates = ratesQuery.data || {}
+  const selectedRate = liveRates[currency]
+  const rate = selectedRate?.rate || 0
+  const foreignAmount = amountGHS && rate > 0 ? (parseFloat(amountGHS) / rate).toFixed(2) : '0.00'
   const fee = amountGHS ? (parseFloat(amountGHS) * 0.01).toFixed(2) : '0.00'
   const total = amountGHS ? (parseFloat(amountGHS) + parseFloat(fee)).toFixed(2) : '0.00'
 
@@ -69,7 +66,7 @@ export default function DiasporaPage() {
         </div>
         <h2 className="text-xl font-bold text-gray-900 mb-2">Contribution Sent!</h2>
         <p className="text-gray-500 text-center mb-6">
-          {exchangeRates[currency].flag} {foreignAmount} {currency} → GHS {amountGHS}
+          {currencies[currency].flag} {foreignAmount} {currency} → GHS {amountGHS}
         </p>
         <p className="text-sm text-gray-400 text-center">
           Your family will receive an SMS confirmation.
@@ -254,10 +251,10 @@ export default function DiasporaPage() {
 
             <button
               onClick={handleContribute}
-              disabled={!amountGHS || parseFloat(amountGHS) <= 0}
+                disabled={!selectedRate || rate <= 0 || !amountGHS || parseFloat(amountGHS) <= 0}
               className="w-full bg-adansi-primary text-adansi-secondary font-bold py-4 rounded-xl disabled:opacity-50 active:scale-[0.98] transition-transform flex items-center justify-center gap-2"
             >
-              Pay {exchangeRates[currency].flag} {foreignAmount} {currency}
+              Pay {currencies[currency].flag} {foreignAmount} {currency}
             </button>
 
             <button

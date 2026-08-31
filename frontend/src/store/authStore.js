@@ -43,20 +43,6 @@ export const useAuthStore = create((set, get) => ({
       return
     }
 
-    if (token.startsWith('demo-')) {
-      const demoUser = savedUser || {
-        id: 'demo-user-123',
-        phone: '+233240000000',
-        full_name: 'Damien Nsoh (Demo User)',
-        credit_score: 720,
-        total_contributed: 1500.00,
-        groups_count: 3,
-        is_verified: true
-      }
-      set({ user: demoUser, isAuthenticated: true, isLoading: false, token })
-      return
-    }
-
     try {
       const response = await fetch(`${import.meta.env.VITE_API_URL}/users/me`, {
         headers: { Authorization: `Bearer ${token}` }
@@ -67,18 +53,13 @@ export const useAuthStore = create((set, get) => ({
         localStorage.setItem('adansi_user', JSON.stringify(user))
         set({ user, isAuthenticated: true, isLoading: false, token })
       } else {
-        if (savedUser) {
-          set({ user: savedUser, isAuthenticated: true, isLoading: false, token })
-        } else {
-          set({ isLoading: false, isAuthenticated: false, user: null })
-        }
+        localStorage.removeItem('adansi_access_token')
+        localStorage.removeItem('adansi_refresh_token')
+        localStorage.removeItem('adansi_user')
+        set({ isLoading: false, isAuthenticated: false, user: null, token: null })
       }
     } catch {
-      if (savedUser) {
-        set({ user: savedUser, isAuthenticated: true, isLoading: false, token })
-      } else {
-        set({ isLoading: false, isAuthenticated: false, user: null })
-      }
+      set({ isLoading: false, isAuthenticated: false, user: null, token: null })
     }
   }
 }))

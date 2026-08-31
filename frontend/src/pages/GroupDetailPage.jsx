@@ -109,6 +109,9 @@ export default function GroupDetailPage() {
           <span>{members.length} members</span>
           <span className="mx-2">•</span>
           <span className="capitalize">{group.type}</span>
+          <span className="mx-2">•</span>
+          <span>Contributions: {group.contribution_frequency || 'adhoc'}</span>
+          {group.contribution_amount ? <><span className="mx-2">•</span><span>{formatCurrency(group.contribution_amount)} planned</span></> : null}
         </div>
 
         <div className="mt-4 bg-white/20 rounded-xl p-3 flex items-center justify-between">
@@ -269,7 +272,7 @@ export default function GroupDetailPage() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="font-medium text-gray-900 text-sm">Contribution</p>
-                      <p className="text-xs text-gray-500">{formatRelativeTime(tx.created_at)}</p>
+                      <p className="text-xs text-gray-500">{formatRelativeTime(tx.created_at)} • {tx.method || 'momo'} • {tx.contribution_frequency || group.contribution_frequency || 'adhoc'}</p>
                     </div>
                     <div className="text-right">
                       <p className="font-semibold text-sm text-green-600">+{formatCurrency(tx.amount)}</p>
