@@ -15,10 +15,6 @@ const exchangeRates = {
   CAD: { rate: 11.4, flag: '🇨🇦' },
 }
 
-const mockGroups = [
-  { id: 1, name: 'Uncle Kofi Funeral Fund', code: 'FNRL01', type: 'funeral', balance: 12500, target: 20000, members: 45 },
-  { id: 2, name: 'Ama Wedding Support', code: 'WEDG02', type: 'wedding', balance: 8400, target: 15000, members: 32 },
-]
 
 export default function DiasporaPage() {
   const navigate = useNavigate()
@@ -28,6 +24,7 @@ export default function DiasporaPage() {
   const [currency, setCurrency] = useState('USD')
   const [searchCode, setSearchCode] = useState('')
   const [foundGroup, setFoundGroup] = useState(null)
+  const [hasSearched, setHasSearched] = useState(false)
   const ratesQuery = useQuery({
     queryKey: ['exchange-rates'],
     queryFn: async () => {
@@ -49,14 +46,19 @@ export default function DiasporaPage() {
   const fee = amountGHS ? (parseFloat(amountGHS) * 0.01).toFixed(2) : '0.00'
   const total = amountGHS ? (parseFloat(amountGHS) + parseFloat(fee)).toFixed(2) : '0.00'
 
-  const handleSearch = () => {
-    const group = mockGroups.find(g => g.code.toLowerCase() === searchCode.toLowerCase())
-    setFoundGroup(group || null)
+  const handleSearch = async () => {
+    if (!searchCode.trim()) return
+    setHasSearched(true)
+    try {
+      const { data } = await api.get(`/groups/code/${encodeURIComponent(searchCode.trim())}`)
+      setFoundGroup(data)
+    } catch {
+      setFoundGroup(null)
+    }
   }
 
   const handleContribute = () => {
-    setStep('payment')
-    setTimeout(() => setStep('success'), 2500)
+    window.alert('Hubtel card checkout is not configured for this environment yet. No contribution was recorded.')
   }
 
   if (step === 'success') {
@@ -145,7 +147,7 @@ export default function DiasporaPage() {
                 Find Group
               </button>
 
-              {foundGroup === null && searchCode.length >= 4 && (
+              {hasSearched && foundGroup === null && (
                 <p className="text-red-500 text-xs mt-2 text-center">Group not found. Check the code and try again.</p>
               )}
 
@@ -174,7 +176,7 @@ export default function DiasporaPage() {
             <div>
               <h3 className="font-bold text-gray-900 mb-3">Popular Groups</h3>
               <div className="space-y-3">
-                {mockGroups.map(group => (
+                {[].map(group => (
                   <button
                     key={group.id}
                     onClick={() => { setSelectedGroup(group); setStep('amount') }}

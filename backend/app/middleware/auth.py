@@ -28,24 +28,7 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
             headers={"WWW-Authenticate": "Bearer"}
         )
 
-    # Handle demo access tokens in development / demo mode
-    if token.startswith("demo-") or (settings.debug and token == "demo_access_token"):
-        async with AsyncSessionLocal() as session:
-            result = await session.execute(select(User).where(User.phone == "+233241234567"))
-            user = result.scalar_one_or_none()
-            if not user:
-                user = User(
-                    id=UUID("00000000-0000-0000-0000-000000000001"),
-                    auth_user_id=UUID("00000000-0000-0000-0000-000000000001"),
-                    phone="+233241234567",
-                    full_name="Amina Owusu",
-                    role="admin",
-                    is_active=True
-                )
-                session.add(user)
-                await session.commit()
-                await session.refresh(user)
-            return user
+    token = credentials.credentials
 
     try:
         # Verify JWT with Supabase secret

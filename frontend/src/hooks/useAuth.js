@@ -17,40 +17,16 @@ export function useAuth() {
 
   const verifyOTP = useMutation({
     mutationFn: async ({ phone, otp, pin }) => {
-      let session = null
-      try {
-        const res = await verifyPhoneOTP(phone, otp)
-        session = res.session
-      } catch (err) {
-        // Fallback for dev testing or any 6-digit test code (e.g. 123456)
-        session = { 
-          access_token: 'demo-access-token', 
-          refresh_token: 'demo-refresh-token', 
-          user: { id: 'demo-user-123', user_metadata: { full_name: 'Damien Nsoh' } } 
-        }
+      const res = await verifyPhoneOTP(phone, otp)
+      const session = res.session
+      if (!session?.access_token) {
+        throw new Error('Authentication did not return a session')
       }
 
-      if (session?.access_token) {
-        setTokens(session.access_token, session.refresh_token)
-      }
-
-      try {
-        const { data: userData } = await api.get('/users/me')
-        setUser(userData)
-        return userData
-      } catch (err) {
-        const tempUser = {
-          id: session?.user?.id || 'demo-user-123',
-          phone: phone || '+233240000000',
-          full_name: 'Damien Nsoh',
-          credit_score: 720,
-          total_contributed: 1500.00,
-          groups_count: 3,
-          is_verified: true
-        }
-        setUser(tempUser)
-        return tempUser
-      }
+      setTokens(session.access_token, session.refresh_token)
+      const { data: userData } = await api.get('/users/me')
+      setUser(userData)
+      return userData
     },
   })
 
@@ -60,14 +36,9 @@ export function useAuth() {
       if (data.access_token) {
         setTokens(data.access_token, data.refresh_token)
       }
-      try {
-        const { data: userData } = await api.get('/users/me')
-        setUser(userData)
-        return userData
-      } catch {
-        setUser({ phone, full_name: 'Member' })
-        return { phone }
-      }
+      const { data: userData } = await api.get('/users/me')
+      setUser(userData)
+      return userData
     },
   })
 
@@ -77,12 +48,8 @@ export function useAuth() {
       if (data.access_token) {
         setTokens(data.access_token, data.refresh_token)
       }
-      try {
-        const { data: userData } = await api.get('/users/me')
-        setUser(userData)
-      } catch {
-        setUser({ phone, full_name: localStorage.getItem('adansi_user_name') || 'Member' })
-      }
+      const { data: userData } = await api.get('/users/me')
+      setUser(userData)
       return data
     },
   })

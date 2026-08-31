@@ -20,17 +20,15 @@ export default function ProfileSetupPage() {
     try {
       await api.patch('/auth/profile', null, {
         params: {
-          phone,
-          full_name: fullName,
-          ghana_card_number: ghanaCard || null
+          full_name: fullName.trim(),
+          ghana_card_number: ghanaCard.trim() || undefined
         }
       })
-    } catch {
-      // Save locally if offline or demo
-      localStorage.setItem('adansi_user_name', fullName)
+      navigate('/setup-pin', { state: { phone, fullName } })
+    } catch (error) {
+      window.alert(error?.response?.data?.detail || 'We could not save your profile. Please try again.')
     } finally {
       setLoading(false)
-      navigate('/setup-pin', { state: { phone, fullName } })
     }
   }
 

@@ -59,6 +59,8 @@ async def execute_disbursement(
     db: AsyncSession,
 ) -> dict:
     """Disburse funds directly to beneficiary (never to requester)."""
+    if withdrawal.status == "disbursed" and withdrawal.momo_disbursement_ref:
+        return {"success": True, "reference": withdrawal.momo_disbursement_ref, "beneficiary": withdrawal.beneficiary_name or withdrawal.beneficiary_phone, "status": "disbursed", "already_processed": True}
     if not withdrawal.beneficiary_phone:
         return {"success": False, "error": "Beneficiary phone is required"}
 
