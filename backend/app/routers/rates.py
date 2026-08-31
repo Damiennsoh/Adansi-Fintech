@@ -1,5 +1,6 @@
 """Server-side exchange rate quotes with short-lived provider caching."""
 from datetime import datetime, timedelta, timezone
+from uuid import uuid4
 from fastapi import APIRouter, HTTPException
 import httpx
 from app.services.redis_service import RedisService
@@ -23,7 +24,7 @@ async def get_rate(base: str):
         rate = payload.get("rates", {}).get("GHS")
         if not rate:
             raise ValueError("Provider did not return GHS")
-        quote = {"base_currency": base, "quote_currency": "GHS", "rate": rate, "provider": "frankfurter", "fetched_at": now.isoformat(), "expires_at": (now + timedelta(minutes=15)).isoformat()}
+        quote = {"quote_id": str(uuid4()), "base_currency": base, "quote_currency": "GHS", "rate": rate, "provider": "frankfurter", "fetched_at": now.isoformat(), "expires_at": (now + timedelta(minutes=15)).isoformat()}
         RedisService.set_json(f"rate:{base}:GHS", quote, 900)
         return {**quote, "cached": False}
     except Exception as exc:

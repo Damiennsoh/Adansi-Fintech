@@ -9,8 +9,8 @@ from app.models import User, Group, GroupMember, Contribution, Transaction, Audi
 router = APIRouter(prefix="/admin", tags=["Admin"])
 
 async def require_admin(user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    if not getattr(user, "is_admin", False):
-        raise HTTPException(status_code=403, detail="Admin access required")
+    if getattr(user, "role", "user") not in {"platform_admin", "super_admin"}:
+        raise HTTPException(status_code=403, detail="Platform admin access required")
     return user
 
 @router.get("/overview")

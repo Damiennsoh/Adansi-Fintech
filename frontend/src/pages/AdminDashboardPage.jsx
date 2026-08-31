@@ -9,28 +9,7 @@ import { formatCurrency, formatRelativeTime } from '../lib/utils'
 import { useQuery } from '@tanstack/react-query'
 import api from '../lib/api'
 
-const mockStats = {
-  totalUsers: 1247,
-  totalGroups: 89,
-  totalVolume: 2847500,
-  activeAgents: 342,
-  pendingVerifications: 12,
-  avgCreditScore: 612,
-}
-
-const mockTransactions = [
-  { id: 1, type: 'contribution', amount: 500, user: 'Amina Owusu', group: 'Funeral Fund', status: 'completed', time: '2026-08-29T12:30:00Z' },
-  { id: 2, type: 'withdrawal', amount: 1200, user: 'Kofi Mensah', group: 'Wedding Fund', status: 'pending', time: '2026-08-29T11:15:00Z' },
-  { id: 3, type: 'contribution', amount: 200, user: 'Grace Addo', group: 'Health Support', status: 'completed', time: '2026-08-29T10:00:00Z' },
-  { id: 4, type: 'withdrawal', amount: 3500, user: 'Yaw Boateng', group: 'Investment Club', status: 'pending', time: '2026-08-28T16:45:00Z' },
-  { id: 5, type: 'contribution', amount: 100, user: 'Efua Darko', group: 'Susu Group', status: 'completed', time: '2026-08-28T09:20:00Z' },
-]
-
-const mockAgents = [
-  { id: 1, name: 'Agent Kwame', location: 'Accra Central', verifications: 45, status: 'active' },
-  { id: 2, name: 'Agent Abena', location: 'Kumasi Market', verifications: 32, status: 'active' },
-  { id: 3, name: 'Agent Kofi', location: 'Tamale Junction', verifications: 28, status: 'offline' },
-]
+const emptyStats = { totalUsers: 0, totalGroups: 0, totalVolume: 0, pendingVerifications: 0 }
 
 const getStatCards = (stats) => [
   { label: 'Total Users', value: stats.totalUsers, icon: Users, color: 'bg-blue-50 text-blue-600', change: 'live' },
@@ -47,8 +26,8 @@ export default function AdminDashboardPage() {
     queryFn: async () => (await api.get('/admin/overview')).data,
     retry: false,
   })
-  const liveStats = overviewQuery.data?.stats || mockStats
-  const liveTransactions = overviewQuery.data?.transactions || mockTransactions
+  const liveStats = overviewQuery.data?.stats || emptyStats
+  const liveTransactions = overviewQuery.data?.transactions || []
   const statCards = getStatCards(liveStats)
 
   const filteredTransactions = liveTransactions.filter(tx => 
@@ -164,7 +143,7 @@ export default function AdminDashboardPage() {
                 </button>
               </div>
               <div className="divide-y divide-gray-50">
-                {mockAgents.map(agent => (
+                {([]).map(agent => (
                   <div key={agent.id} className="flex items-center gap-3 py-3 px-4">
                     <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
                       agent.status === 'active' ? 'bg-green-50' : 'bg-gray-100'
@@ -249,7 +228,7 @@ export default function AdminDashboardPage() {
                 <span className="text-xs text-gray-500 font-medium">342 Registered Agents</span>
               </div>
               <div className="divide-y divide-gray-50">
-                {mockAgents.map(agent => (
+                {([]).map(agent => (
                   <div key={agent.id} className="flex items-center gap-3 py-3 px-4">
                     <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
                       agent.status === 'active' ? 'bg-green-50' : 'bg-gray-100'
@@ -291,7 +270,7 @@ export default function AdminDashboardPage() {
             <div className="grid grid-cols-2 gap-3">
               <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
                 <p className="text-xs text-gray-500 mb-1">Avg Credit Score</p>
-                <p className="text-2xl font-bold text-gray-900">{mockStats.avgCreditScore}</p>
+                <p className="text-2xl font-bold text-gray-900">{overviewQuery.data?.stats?.avgCreditScore ?? '—'}</p>
                 <div className="w-full bg-gray-100 rounded-full h-1.5 mt-2">
                   <div className="bg-adansi-primary rounded-full h-1.5" style={{ width: '72%' }} />
                 </div>

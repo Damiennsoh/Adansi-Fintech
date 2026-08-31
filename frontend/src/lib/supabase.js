@@ -12,6 +12,14 @@ const supabaseAnonKey = (
   import.meta.env.SUPABASE_ANON_KEY ||
   import.meta.env.SUPABASE_PUBLISHABLE_KEY
 )?.trim()
+export function normalizeGhanaPhone(phone) {
+  const digits = String(phone || '').replace(/\D/g, '')
+  if (digits.startsWith('233')) return `+${digits}`
+  if (digits.startsWith('0') && digits.length === 10) return `+233${digits.slice(1)}`
+  if (digits.length === 9) return `+233${digits}`
+  return phone.trim()
+}
+
 const hasSupabaseConfig = Boolean(
   supabaseUrl &&
     supabaseAnonKey &&
@@ -48,7 +56,7 @@ function requireSupabase() {
 
 export async function signInWithPhone(phone) {
   const { data, error } = await requireSupabase().auth.signInWithOtp({
-    phone,
+    phone: normalizeGhanaPhone(phone),
   })
   if (error) throw error
   return data
@@ -56,7 +64,7 @@ export async function signInWithPhone(phone) {
 
 export async function verifyPhoneOTP(phone, token) {
   const { data, error } = await requireSupabase().auth.verifyOtp({
-    phone,
+    phone: normalizeGhanaPhone(phone),
     token,
     type: 'sms',
   })

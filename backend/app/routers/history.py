@@ -1,5 +1,5 @@
 """User contribution history & audit endpoints."""
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 
@@ -62,6 +62,46 @@ async def get_my_contribution_history(
     transactions.sort(key=lambda t: t["created_at"] or "", reverse=True)
 
     return {"contributions": transactions}
+
+
+@router.get("/groups/{group_id}")
+async def get_group_history(
+    group_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Return a member's complete, group-scoped ledger with contribution rules."""
+    membership = await db.scalar(select(GroupMember).where(
+        GroupMember.group_id == group_id,
+        GroupMember.user_id == current_user.id,
+    ))
+    if not membership:
+        raise HTTPException(status_code=403, detail="You are not a member of this group")
+    group = await db.get(Group, group_id)
+    if not group:
+        raise HTTPException(status_code=404, detail="Group not found")
+    result = await db.execute(select(Contribution).where(
+        Contribution.group_id == group_id,
+        Contribution.user_id == current_user.id,
+    ).order_by(Contribution.created_at.desc()))
+    contributions = result.scalars().all()
+    withdrawals = await db.execute(select(Withdrawal).where(
+        Withdrawal.group_id == group_id,
+        Withdrawal.requested_by == current_user.id,
+    ).order_by(Withdrawal.created_at.desc()))
+    entries = [{
+        "id": str(item.id), "type": "contribution", "amount": float(item.amount),
+        "status": item.status, "method": item.method, "created_at": item.created_at,
+        "contribution_frequency": group.contribution_frequency or "adhoc",
+        "scheduled_amount": float(group.contribution_amount) if group.contribution_amount else None,
+    } for item in contributions]
+    entries += [{
+        "id": str(item.id), "type": "withdrawal", "amount": float(item.amount),
+        "status": item.status, "method": item.disbursement_method, "created_at": item.created_at,
+        "contribution_frequency": group.contribution_frequency or "adhoc",
+    } for item in withdrawals.scalars().all()]
+    entries.sort(key=lambda item: item["created_at"] or "", reverse=True)
+    return {"group": {"id": str(group.id), "name": group.name, "contribution_frequency": group.contribution_frequency or "adhoc", "contribution_amount": float(group.contribution_amount) if group.contribution_amount else None}, "entries": entries}
 
 
 @router.get("/summary")
@@ -140,6 +180,8 @@ async def get_my_history_by_group(
             "user_total": float(user_total),
             "group_total": float(group_total),
             "contribution_count": contrib_count or 0,
+            "contribution_frequency": g.contribution_frequency or "adhoc",
+            "contribution_amount": float(g.contribution_amount) if g.contribution_amount else None,
             "on_time_rate": await compute_group_on_time_rate(db, g.id, current_user.id),
         })
 
