@@ -14,7 +14,14 @@ export default function GroupCard({ group }) {
             {group.name.charAt(0)}
           </div>
           <div>
-            <h3 className="font-semibold text-gray-900">{group.name}</h3>
+            <div className="flex items-center gap-2">
+              <h3 className="font-semibold text-gray-900">{group.name}</h3>
+              {group.code && (
+                <span className="font-mono text-[10px] bg-adansi-secondary/10 text-adansi-secondary font-bold px-1.5 py-0.5 rounded border border-adansi-secondary/20">
+                  {group.code}
+                </span>
+              )}
+            </div>
             <span className="text-xs text-gray-500 capitalize">{group.type} Group</span>
           </div>
         </div>

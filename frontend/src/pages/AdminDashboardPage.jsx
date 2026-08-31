@@ -41,6 +41,7 @@ const getStatCards = (stats) => [
 
 export default function AdminDashboardPage() {
   const [activeTab, setActiveTab] = useState('overview')
+  const [searchQuery, setSearchQuery] = useState('')
   const overviewQuery = useQuery({
     queryKey: ['admin-overview'],
     queryFn: async () => (await api.get('/admin/overview')).data,
@@ -49,6 +50,13 @@ export default function AdminDashboardPage() {
   const liveStats = overviewQuery.data?.stats || mockStats
   const liveTransactions = overviewQuery.data?.transactions || mockTransactions
   const statCards = getStatCards(liveStats)
+
+  const filteredTransactions = liveTransactions.filter(tx => 
+    !searchQuery || 
+    (tx.user && tx.user.toLowerCase().includes(searchQuery.toLowerCase())) ||
+    (tx.group && tx.group.toLowerCase().includes(searchQuery.toLowerCase())) ||
+    (tx.type && tx.type.toLowerCase().includes(searchQuery.toLowerCase()))
+  )
 
   const tabs = [
     { key: 'overview', label: 'Overview', icon: LayoutDashboard },
@@ -194,7 +202,7 @@ export default function AdminDashboardPage() {
               </div>
             </div>
             <div className="divide-y divide-gray-50">
-              {liveTransactions.map(tx => (
+              {filteredTransactions.map(tx => (
                 <div key={tx.id} className="flex items-center gap-3 py-3 px-4">
                   <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
                     tx.type === 'contribution' ? 'bg-green-50' : 'bg-red-50'

@@ -30,11 +30,11 @@ async def create_group(
     group = await group_service.create_group(
         name=request.name,
         type=request.type,
-        purpose=request.purpose,
+        purpose=request.get_purpose(),
         target_amount=request.target_amount,
         withdrawal_threshold=request.withdrawal_threshold,
         agent_verification_required=request.agent_verification_required,
-        contribution_frequency=request.contribution_frequency,
+        contribution_frequency=request.get_frequency(),
         contribution_amount=request.contribution_amount,
         created_by=current_user.id,
         approval_rule=request.approval_rule,
