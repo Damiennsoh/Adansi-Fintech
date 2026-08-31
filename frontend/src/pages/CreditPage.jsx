@@ -83,9 +83,9 @@ export default function CreditPage() {
 
         {/* Loan Eligibility */}
         <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-4">
             <h2 className="font-bold text-gray-900">Micro-Loan</h2>
-            <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded-full">Backed by Group Treasury</span>
+            <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded-full w-fit">Backed by Group Treasury</span>
           </div>
 
           <div className="grid grid-cols-3 gap-2 mb-4">
@@ -125,13 +125,13 @@ export default function CreditPage() {
               const eligible = (creditProfile?.score || 0) >= lender.minScore
               return (
                 <div key={lender.id} className="border border-gray-100 rounded-xl p-4">
-                  <div className="flex justify-between items-start mb-2">
-                    <h3 className="font-bold text-gray-900 text-sm">{lender.name}</h3>
+                  <div className="flex flex-wrap justify-between items-start gap-2 mb-2">
+                    <h3 className="font-bold text-gray-900 text-sm break-words min-w-0 flex-1">{lender.name}</h3>
                     {lender.status === 'coming_soon' && (
-                      <span className="text-[10px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full font-semibold">Coming Soon</span>
+                      <span className="text-[10px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full font-semibold flex-shrink-0">Coming Soon</span>
                     )}
                   </div>
-                  <p className="text-xs text-gray-600">Max: {formatCurrency(lender.maxLoan)} • {lender.rate}% / year • Min score: {lender.minScore}</p>
+                  <p className="text-xs text-gray-600 break-words">Max: {formatCurrency(lender.maxLoan)} • {lender.rate}% / year • Min score: {lender.minScore}</p>
                   <div className="flex items-center justify-between mt-3">
                     <span className={`text-xs font-bold px-2 py-1 rounded-full ${eligible ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
                       {eligible ? 'Eligible' : `Requires ${lender.minScore}+`}
@@ -193,9 +193,9 @@ export default function CreditPage() {
       {showLoanForm && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center">
           <div className="bg-white rounded-t-3xl sm:rounded-2xl w-full max-w-sm p-6 animate-slide-up space-y-4">
-            <div className="flex justify-between items-center">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
               <h3 className="text-lg font-bold text-gray-900">Apply for Micro-Loan</h3>
-              <span className="text-xs bg-adansi-primary/20 text-adansi-secondary font-bold px-2 py-0.5 rounded-full">
+              <span className="text-xs bg-adansi-primary/20 text-adansi-secondary font-bold px-2 py-0.5 rounded-full w-fit">
                 {isVouched ? '3% Monthly Rate' : '5% Monthly Rate'}
               </span>
             </div>

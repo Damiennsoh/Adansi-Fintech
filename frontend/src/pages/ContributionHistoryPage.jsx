@@ -37,7 +37,7 @@ export default function ContributionHistoryPage() {
     <div className="min-h-screen bg-gray-50 pb-20">
       <div className="bg-adansi-secondary px-5 pt-8 pb-6">
         <h1 className="text-xl font-bold text-white mb-6">Contribution History</h1>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-2 gap-2 sm:gap-3">
           <div className="bg-white/10 rounded-xl p-3">
             <p className="text-xs text-gray-400">All-Time Total</p>
             <p className="text-lg font-bold text-white">{formatCurrency(summary.all_time_total || 0)}</p>
