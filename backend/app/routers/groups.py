@@ -110,8 +110,13 @@ async def join_group(group_id: UUID, current_user: User = Depends(get_current_us
     existing = await db.execute(select(GroupMember).where(GroupMember.group_id == group_id, GroupMember.user_id == current_user.id))
     if existing.scalar_one_or_none():
         return {"message": "Already a member", "status": "approved"}
+    pending = await db.scalar(select(JoinRequest).where(JoinRequest.group_id == group_id, JoinRequest.user_id == current_user.id, JoinRequest.status == "pending"))
+    if pending:
+        return {"message": "Join request already pending", "request_id": str(pending.id), "status": "pending"}
+
     request = JoinRequest(group_id=group_id, user_id=current_user.id)
     db.add(request)
+    await db.flush()
     db.add(AuditEvent(group_id=group_id, actor_id=current_user.id, event_type="join_requested", entity_type="join_request", entity_id=request.id))
     await db.commit()
     return {"message": "Join request submitted", "request_id": str(request.id), "status": "pending"} 
@@ -175,9 +180,13 @@ async def join_group_by_code(request: JoinGroupRequest, current_user: User = Dep
     if join_type == "invite_only":
         raise HTTPException(status_code=403, detail="This group is invite-only")
 
-    from app.models import JoinRequest
+    jr = await db.scalar(select(JoinRequest).where(JoinRequest.group_id == group.id, JoinRequest.user_id == current_user.id, JoinRequest.status == "pending"))
+    if jr:
+        return {"message": "Join request already pending", "group_id": str(group.id), "status": "pending", "request_id": str(jr.id)}
     jr = JoinRequest(group_id=group.id, user_id=current_user.id)
     db.add(jr)
+    await db.flush()
+    db.add(AuditEvent(group_id=group.id, actor_id=current_user.id, event_type="join_requested", entity_type="join_request", entity_id=jr.id))
     await db.commit()
     return {"message": "Join request submitted", "group_id": str(group.id), "status": "pending", "request_id": str(jr.id)}
 

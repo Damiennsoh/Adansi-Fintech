@@ -8,8 +8,8 @@ from app.services.redis_service import redis_service
 from app.services.group_service import group_service
 from app.services.momo_service import momo_service
 from app.database import AsyncSessionLocal
-from app.models import User, Group, GroupMember
-from sqlalchemy import select
+from app.models import User, Group, GroupMember, Contribution
+from sqlalchemy import select, func
 
 router = APIRouter(prefix="/ussd", tags=["USSD"])
 
@@ -59,7 +59,15 @@ async def handle_ussd(request: HubtelUssdRequest):
         if user_input == "1":
             session["menu"] = "my_groups"
             redis_service.set_ussd_session(session_id, session)
-            return UssdResponse(message="Your groups: 1. Dad's Funeral 2. Wedding Fund 0. Back", continueSession=True)
+            if not user:
+                return UssdResponse(message="No ADANSI profile found for this number. 0. Back", continueSession=True)
+            async with AsyncSessionLocal() as db:
+                result = await db.execute(select(Group).join(GroupMember).where(GroupMember.user_id == user.id).order_by(Group.name).limit(9))
+                groups = result.scalars().all()
+            session["data"]["groups"] = [{"id": str(g.id), "name": g.name} for g in groups]
+            redis_service.set_ussd_session(session_id, session)
+            names = " ".join(f"{i + 1}. {g.name}" for i, g in enumerate(groups)) or "You have no groups."
+            return UssdResponse(message=f"Your groups: {names} 0. Back", continueSession=True)
         elif user_input == "2":
             session["menu"] = "join_group"
             redis_service.set_ussd_session(session_id, session)
@@ -67,11 +75,27 @@ async def handle_ussd(request: HubtelUssdRequest):
         elif user_input == "3":
             session["menu"] = "contribute_select"
             redis_service.set_ussd_session(session_id, session)
-            return UssdResponse(message="Select group: 1. Dad's Funeral 2. Wedding Fund 0. Back", continueSession=True)
+            if not user:
+                return UssdResponse(message="No ADANSI profile found for this number. 0. Back", continueSession=True)
+            async with AsyncSessionLocal() as db:
+                result = await db.execute(select(Group).join(GroupMember).where(GroupMember.user_id == user.id).order_by(Group.name).limit(9))
+                groups = result.scalars().all()
+            session["data"]["groups"] = [{"id": str(g.id), "name": g.name} for g in groups]
+            redis_service.set_ussd_session(session_id, session)
+            names = " ".join(f"{i + 1}. {g.name}" for i, g in enumerate(groups)) or "You have no groups."
+            return UssdResponse(message=f"Select group: {names} 0. Back", continueSession=True)
         elif user_input == "4":
             session["menu"] = "balance_select"
             redis_service.set_ussd_session(session_id, session)
-            return UssdResponse(message="Select group: 1. Dad's Funeral 2. Wedding Fund 0. Back", continueSession=True)
+            if not user:
+                return UssdResponse(message="No ADANSI profile found for this number. 0. Back", continueSession=True)
+            async with AsyncSessionLocal() as db:
+                result = await db.execute(select(Group).join(GroupMember).where(GroupMember.user_id == user.id).order_by(Group.name).limit(9))
+                groups = result.scalars().all()
+            session["data"]["groups"] = [{"id": str(g.id), "name": g.name} for g in groups]
+            redis_service.set_ussd_session(session_id, session)
+            names = " ".join(f"{i + 1}. {g.name}" for i, g in enumerate(groups)) or "You have no groups."
+            return UssdResponse(message=f"Select group: {names} 0. Back", continueSession=True)
         elif user_input == "5":
             session["menu"] = "loans_menu"
             redis_service.set_ussd_session(session_id, session)
@@ -108,11 +132,16 @@ async def handle_ussd(request: HubtelUssdRequest):
             return UssdResponse(message="Cancelled. 0. Back", continueSession=True)
 
     elif current_menu == "contribute_select":
-        # TODO: Fetch user's actual groups
+        groups = session.get("data", {}).get("groups", [])
+        try:
+            selected = groups[int(user_input) - 1]
+        except (ValueError, IndexError):
+            return UssdResponse(message="Invalid group. Select a listed group:", continueSession=True)
         session["menu"] = "contribute_amount"
-        session["data"]["group_name"] = "Dad's Funeral"  # Mock for now
+        session["data"]["group_id"] = selected["id"]
+        session["data"]["group_name"] = selected["name"]
         redis_service.set_ussd_session(session_id, session)
-        return UssdResponse(message="Enter amount (GHS):", continueSession=True)
+        return UssdResponse(message=f"Enter amount for {selected['name']} (GHS):", continueSession=True)
 
     elif current_menu == "contribute_amount":
         try:
@@ -148,9 +177,18 @@ async def handle_ussd(request: HubtelUssdRequest):
             return UssdResponse(message="Cancelled. 0. Back", continueSession=True)
 
     elif current_menu == "balance_select":
+        groups = session.get("data", {}).get("groups", [])
+        try:
+            selected = groups[int(user_input) - 1]
+        except (ValueError, IndexError):
+            return UssdResponse(message="Invalid group. Select a listed group:", continueSession=True)
+        async with AsyncSessionLocal() as db:
+            group = await db.get(Group, selected["id"])
+            contributed = await db.scalar(select(func.coalesce(func.sum(Contribution.amount), 0)).where(Contribution.group_id == group.id, Contribution.user_id == user.id, Contribution.status == "completed")) if group and user else 0
         session["menu"] = "main"
         redis_service.set_ussd_session(session_id, session)
-        return UssdResponse(message="Balance: GHS 1,240. Your contribution: GHS 150. 0. Back", continueSession=True)
+        balance = float(group.current_balance) if group else 0
+        return UssdResponse(message=f"{selected['name']}: balance GHS {balance:.2f}. Your contribution: GHS {float(contributed):.2f}. 0. Back", continueSession=True)
 
     elif current_menu == "loans_menu":
         if user_input == "1":

@@ -229,7 +229,7 @@ async def approve_withdrawal(
     db: AsyncSession = Depends(get_db)
 ):
     """Treasurer approves or rejects a pending withdrawal."""
-    withdrawal = await db.get(Withdrawal, withdrawal_id)
+    withdrawal = await db.scalar(select(Withdrawal).where(Withdrawal.id == withdrawal_id).with_for_update())
     if not withdrawal:
         raise HTTPException(status_code=404, detail="Withdrawal not found")
 
@@ -250,6 +250,8 @@ async def approve_withdrawal(
     member = member_check.scalar_one_or_none()
     if not member:
         raise HTTPException(status_code=403, detail="You are not a member of this group")
+    if current_user.id == withdrawal.requested_by:
+        raise HTTPException(status_code=403, detail="The requester cannot approve their own withdrawal")
 
     group = await db.get(Group, withdrawal.group_id)
     rule = group.approval_rule or "any_1_treasurer"

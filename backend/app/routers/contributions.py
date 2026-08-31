@@ -108,7 +108,7 @@ async def verify_contribution(
     db: AsyncSession = Depends(get_db)
 ):
     """Manually verify a pending contribution (admin/treasurer)."""
-    contribution = await db.get(Contribution, contribution_id)
+    contribution = await db.scalar(select(Contribution).where(Contribution.id == contribution_id).with_for_update())
     if not contribution:
         raise HTTPException(status_code=404, detail="Contribution not found")
 
@@ -205,7 +205,7 @@ async def hubtel_callback(
 
     # Find contribution by reference
     result = await db.execute(
-        select(Contribution).where(Contribution.transaction_ref == client_ref)
+        select(Contribution).where(Contribution.transaction_ref == client_ref).with_for_update()
     )
     contribution = result.scalar_one_or_none()
 
@@ -215,6 +215,10 @@ async def hubtel_callback(
     existing_transaction = await db.scalar(select(Transaction).where(Transaction.reference == client_ref))
     if contribution.status != "pending" or existing_transaction:
         return {"status": "ignored", "reason": "Already processed"}
+    if status == "success" and amount != Decimal(str(contribution.amount)):
+        contribution.status = "failed"
+        await db.commit()
+        return {"status": "ignored", "reason": "Callback amount mismatch"}
 
     if status == "success":
         contribution.status = "completed"
