@@ -1,8 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useGroups } from '../hooks/useGroups'
-import { ArrowLeft, Loader2, Users, Target, Calendar, Copy, CheckCircle2 } from 'lucide-react'
-import { generateGroupCode } from '../lib/utils'
+import { ArrowLeft, Users, Target, Calendar, Copy, CheckCircle2 } from 'lucide-react'
 
 const groupTypes = [
   { key: 'funeral', label: 'Funeral', desc: 'Funeral contributions & expenses', color: 'bg-purple-500' },
@@ -51,16 +50,9 @@ export default function CreateGroupPage() {
       }
       const data = await createGroup.mutateAsync(payload)
       setCreatedGroup(data)
-    } catch {
-      // Demo fallback: generate local group with unique code so the user is not blocked
-      const fallbackCode = generateGroupCode()
-      setCreatedGroup({
-        id: `local-${Date.now()}`,
-        name: form.name,
-        type: form.type,
-        code: fallbackCode,
-        current_balance: 0,
-      })
+    } catch (error) {
+      const detail = error?.response?.data?.detail || 'The group could not be created. Please check your details and try again.'
+      alert(detail)
     }
   }
 

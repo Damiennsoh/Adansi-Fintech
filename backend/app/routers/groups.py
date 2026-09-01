@@ -54,7 +54,7 @@ async def list_my_groups(current_user: User = Depends(get_current_user), db: Asy
         select(Group, GroupMember.role)
         .join(GroupMember, Group.id == GroupMember.group_id)
         .where(GroupMember.user_id == current_user.id)
-        .options(selectinload(Group.members))
+        .options(selectinload(Group.members).selectinload(GroupMember.user))
     )
     rows = result.all()
 
@@ -75,7 +75,6 @@ async def list_my_groups(current_user: User = Depends(get_current_user), db: Asy
 @router.get("/{group_id}", response_model=GroupResponse)
 async def get_group(group_id: UUID, current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """Get group details, members, and recent activity."""
-    # Verify user is member
     member_check = await db.execute(
         select(GroupMember).where(
             GroupMember.group_id == group_id,
@@ -85,7 +84,12 @@ async def get_group(group_id: UUID, current_user: User = Depends(get_current_use
     if not member_check.scalar_one_or_none():
         raise HTTPException(status_code=403, detail="You are not a member of this group")
 
-    group = await db.get(Group, group_id)
+    result = await db.execute(
+        select(Group)
+        .options(selectinload(Group.members).selectinload(GroupMember.user))
+        .where(Group.id == group_id)
+    )
+    group = result.scalar_one_or_none()
     if not group:
         raise HTTPException(status_code=404, detail="Group not found")
 
@@ -342,6 +346,19 @@ async def get_group_contributions(
     db: AsyncSession = Depends(get_db)
 ):
     """Paginated list of group contributions."""
+    member_check = await db.execute(
+        select(GroupMember).where(
+            GroupMember.group_id == group_id,
+            GroupMember.user_id == current_user.id,
+        )
+    )
+    if not member_check.scalar_one_or_none():
+        raise HTTPException(status_code=403, detail="You are not a member of this group")
+
+    group = await db.get(Group, group_id)
+    if not group:
+        raise HTTPException(status_code=404, detail="Group not found")
+
     result = await db.execute(
         select(Contribution)
         .where(Contribution.group_id == group_id)
@@ -362,6 +379,19 @@ async def get_group_withdrawals(
     db: AsyncSession = Depends(get_db)
 ):
     """Paginated list of group withdrawals."""
+    member_check = await db.execute(
+        select(GroupMember).where(
+            GroupMember.group_id == group_id,
+            GroupMember.user_id == current_user.id,
+        )
+    )
+    if not member_check.scalar_one_or_none():
+        raise HTTPException(status_code=403, detail="You are not a member of this group")
+
+    group = await db.get(Group, group_id)
+    if not group:
+        raise HTTPException(status_code=404, detail="Group not found")
+
     from app.models import Withdrawal
     result = await db.execute(
         select(Withdrawal)

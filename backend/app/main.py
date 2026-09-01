@@ -15,6 +15,19 @@ from app.routers import (
 
 settings = get_settings()
 
+allowed_origins = {
+    origin.strip()
+    for origin in [
+        settings.frontend_url,
+        *(settings.frontend_urls.split(',') if settings.frontend_urls else []),
+        'http://localhost:3000',
+        'http://localhost:5173',
+        'https://adansi-fintech.vercel.app',
+        'https://adansi.app',
+    ]
+    if origin and origin.strip()
+}
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -42,13 +55,8 @@ app = FastAPI(
 # CORS: Allow frontend origin
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        settings.frontend_url,
-        "http://localhost:3000",
-        "http://localhost:5173",
-        "https://adansi-fintech.vercel.app",
-        "https://adansi.app"
-    ],
+    allow_origins=sorted(allowed_origins),
+    allow_origin_regex=r"https:\/\/(.*\.)?(vercel\.app|netlify\.app|githubpreview\.dev)|http:\/\/localhost(:\d+)?",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

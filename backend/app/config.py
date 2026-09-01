@@ -45,6 +45,7 @@ class Settings(BaseSettings):
 
     # Frontend
     frontend_url: str = Field(default="http://localhost:5173", alias="FRONTEND_URL")
+    frontend_urls: str | None = Field(default=None, alias="FRONTEND_URLS")
 
     class Config:
         env_file = ".env"
