@@ -62,7 +62,6 @@ async def create_contribution(
         phone=current_user.phone,
         amount=request.amount,
         description=f"ADANSI contribution to {group.name}",
-        callback_url=f"https://your-api.com/api/v1/contributions/webhook/hubtel",
         network=request.network,
     )
 

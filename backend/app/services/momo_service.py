@@ -49,8 +49,12 @@ class MomoService:
         network: str = "mtn",
     ) -> Dict[str, Any]:
         """Request money from a user's MoMo wallet (collections)."""
+        if not self.client_id or not self.client_secret or not self.merchant_id:
+            return {"success": False, "available": False, "reference": None, "error": "Hubtel is not configured"}
         if not callback_url:
-            callback_url = f"https://your-api-url.com/api/v1/momo/callback/hubtel"
+            if not settings.api_public_url:
+                return {"success": False, "available": False, "reference": None, "error": "API_PUBLIC_URL is required for Hubtel callbacks"}
+            callback_url = f"{settings.api_public_url.rstrip('/')}/api/v1/momo/callback/hubtel"
 
         reference = self._generate_reference("CONT")
         payload = {
@@ -87,8 +91,12 @@ class MomoService:
         network: str = "mtn",
     ) -> Dict[str, Any]:
         """Send money to a user's MoMo wallet (disbursements)."""
+        if not self.client_id or not self.client_secret or not self.merchant_id:
+            return {"success": False, "available": False, "reference": None, "error": "Hubtel is not configured"}
         if not callback_url:
-            callback_url = f"https://your-api-url.com/api/v1/momo/callback/hubtel"
+            if not settings.api_public_url:
+                return {"success": False, "available": False, "reference": None, "error": "API_PUBLIC_URL is required for Hubtel callbacks"}
+            callback_url = f"{settings.api_public_url.rstrip('/')}/api/v1/momo/callback/hubtel"
 
         reference = self._generate_reference("WITH")
         payload = {
