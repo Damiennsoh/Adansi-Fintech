@@ -31,9 +31,10 @@ class Settings(BaseSettings):
     hubtel_base_url: str = Field(default="https://api.hubtel.com/v1", alias="HUBTEL_BASE_URL")
 
     # Twilio
-    twilio_account_sid: str = Field(alias="TWILIO_ACCOUNT_SID")
-    twilio_auth_token: str = Field(alias="TWILIO_AUTH_TOKEN")
+    twilio_account_sid: str | None = Field(default=None, alias="TWILIO_ACCOUNT_SID")
+    twilio_auth_token: str | None = Field(default=None, alias="TWILIO_AUTH_TOKEN")
     twilio_whatsapp_number: str = Field(default="whatsapp:+14155238886", alias="TWILIO_WHATSAPP_NUMBER")
+    twilio_sandbox_code: str | None = Field(default=None, alias="TWILIO_SANDBOX_CODE")
 
     # NIA (Ghana Card KYC)
     nia_api_key: str | None = Field(default=None, alias="NIA_API_KEY")
