@@ -1,0 +1,78 @@
+services:
+  - type: web
+    name: adansi-fintech-api
+    runtime: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.11
+      - key: APP_NAME
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: FRONTEND_URL
+        sync: false
+      - key: SECRET_KEY
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SUPABASE_JWT_SECRET
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: HUBTEL_BASE_URL
+        sync: false
+      - key: NIA_BASE_URL
+        sync: false
+      - key: TWILIO_WHATSAPP_NUMBER
+        sync: false
+      - key: KV_REST_API_URL
+        sync: false
+      - key: KV_REST_API_TOKEN
+        sync: false
+      - key: KV_REST_API_READ_ONLY_TOKEN
+        sync: false
+      - key: REDIS_URL_2
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_PUBLISHABLE_KEY
+        sync: false
+      - key: SUPABASE_SECRET_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY_2
+        sync: false
+      - key: SUPABASE_JWT_SECRET_2
+        sync: false
+      - key: SUPABASE_URL_2
+        sync: false
+      - key: NEXT_PUBLIC_SUPABASE_URL
+        sync: false
+      - key: NEXT_PUBLIC_SUPABASE_ANON_KEY
+        sync: false
+      - key: NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+        sync: false
+      - key: NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL
+        sync: false
+      - key: POSTGRES_DATABASE
+        sync: false
+      - key: POSTGRES_HOST
+        sync: false
+      - key: POSTGRES_PASSWORD
+        sync: false
+      - key: POSTGRES_PRISMA_URL
+        sync: false
+      - key: POSTGRES_URL
+        sync: false
+      - key: POSTGRES_URL_NON_POOLING
+        sync: false
+      - key: POSTGRES_USER
+        sync: false
