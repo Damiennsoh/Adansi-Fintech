@@ -8,7 +8,8 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE TABLE IF NOT EXISTS users (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     auth_user_id UUID UNIQUE REFERENCES auth.users(id) ON DELETE CASCADE,
-    phone VARCHAR(15) UNIQUE NOT NULL,
+    phone VARCHAR(15) UNIQUE,
+    email VARCHAR(255) UNIQUE,
     ghana_card_number VARCHAR(20) UNIQUE,
     ghana_card_image_url VARCHAR(500),
     full_name VARCHAR(100) NOT NULL,
@@ -22,6 +23,7 @@ CREATE TABLE IF NOT EXISTS users (
     updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS idx_users_phone ON users(phone);
+CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 
 -- 2. Groups Table
 CREATE TABLE IF NOT EXISTS groups (

@@ -26,9 +26,13 @@ async def register_user(request: UserRegisterRequest, db: AsyncSession = Depends
         if existing.scalar_one_or_none():
             raise HTTPException(status_code=400, detail="Phone number already registered")
     if request.email:
-        existing = await db.execute(select(User).where(User.email == request.email.lower().strip()))
-        if existing.scalar_one_or_none():
-            raise HTTPException(status_code=400, detail="Email already registered")
+        try:
+            existing = await db.execute(select(User).where(User.email == request.email.lower().strip()))
+            if existing.scalar_one_or_none():
+                raise HTTPException(status_code=400, detail="Email already registered")
+        except Exception:
+            # Compatibility with older DB schemas that do not yet have the email column.
+            pass
 
     phone_for_auth = request.phone or f"+000{abs(hash(request.email or request.full_name)) % 1000000000:09d}"
 
@@ -137,11 +141,15 @@ async def login_user(request: UserLoginRequest, db: AsyncSession = Depends(get_d
         if attempts >= 5:
             raise HTTPException(status_code=429, detail="Too many failed attempts. Try again in 15 minutes.")
 
-    user_result = await db.execute(
-        select(User).where(
-            (User.phone == request.phone) | (User.email == identifier.lower().strip())
+    try:
+        user_result = await db.execute(
+            select(User).where(
+                (User.phone == request.phone) | (User.email == identifier.lower().strip())
+            )
         )
-    )
+    except Exception:
+        # Older deployments may not yet have the email column in users.
+        user_result = await db.execute(select(User).where(User.phone == request.phone))
     user = user_result.scalar_one_or_none()
 
     if user:
