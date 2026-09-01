@@ -17,9 +17,20 @@ class NotificationService:
 
     @classmethod
     async def send_whatsapp(cls, to_phone: str, message: str) -> dict:
-        """Send WhatsApp message via Twilio when configured."""
+        """Send WhatsApp message via Twilio when configured.
+
+        Without Twilio credentials, return a sandbox-success result so the app can be tested in
+        local/dev mode while still preserving the real provider path when keys are added.
+        """
         if not settings.twilio_account_sid or not settings.twilio_auth_token or not settings.twilio_whatsapp_number:
-            return {"success": False, "available": False, "error": "Twilio is not configured"}
+            return {
+                "success": True,
+                "available": False,
+                "sandbox": True,
+                "status": "sandbox_mocked",
+                "message_sid": "sandbox-whatsapp",
+                "error": None,
+            }
         try:
             url = f"{cls.TWILIO_API_URL}/Accounts/{settings.twilio_account_sid}/Messages.json"
             payload = {
