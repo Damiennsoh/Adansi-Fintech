@@ -47,3 +47,7 @@ class PinResetConfirmRequest(BaseModel):
 class GhanaCardVerifyRequest(BaseModel):
     ghana_card_number: str = Field(..., pattern=r"^GHA-[0-9]{9}-[0-9]{1}$")
     image_base64: str = Field(..., min_length=100)
+
+
+class RefreshTokenRequest(BaseModel):
+    refresh_token: str
