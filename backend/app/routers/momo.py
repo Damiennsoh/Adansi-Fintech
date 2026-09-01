@@ -39,13 +39,15 @@ async def disburse_funds(phone: str, amount: Decimal, description: str, db: Asyn
 
 
 @router.post("/callback/hubtel")
-async def momo_callback(payload: MomoCallbackPayload, db: AsyncSession = Depends(get_db)):
+async def momo_callback(payload: MomoCallbackPayload | dict | None, db: AsyncSession = Depends(get_db)):
     """Receives Hubtel callbacks for both collections and disbursements."""
-    is_valid = await momo_service.verify_callback(payload.model_dump())
+    payload_data = payload.model_dump() if hasattr(payload, "model_dump") else dict(payload or {})
+    payload_data = payload_data or {}
+    is_valid = await momo_service.verify_callback(payload_data)
     if not is_valid:
         return {"status": "ignored", "reason": "Invalid callback"}
 
-    data = payload.Data
+    data = payload_data.get("Data") or {}
     reference = data.get("ClientReference")
     if not reference:
         return {"status": "ignored", "reason": "Missing ClientReference"}

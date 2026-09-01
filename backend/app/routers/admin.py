@@ -33,12 +33,18 @@ async def overview(_: User = Depends(require_platform_admin), db: AsyncSession =
         .order_by(Contribution.created_at.desc())
         .limit(20)
     )
+    hubtel = "connected" if getattr(__import__('app.config', fromlist=['get_settings']).get_settings(), "hubtel_client_id", None) and getattr(__import__('app.config', fromlist=['get_settings']).get_settings(), "hubtel_client_secret", None) and getattr(__import__('app.config', fromlist=['get_settings']).get_settings(), "hubtel_merchant_id", None) else "not_configured"
+    twilio = "connected" if getattr(__import__('app.config', fromlist=['get_settings']).get_settings(), "twilio_account_sid", None) and getattr(__import__('app.config', fromlist=['get_settings']).get_settings(), "twilio_auth_token", None) and getattr(__import__('app.config', fromlist=['get_settings']).get_settings(), "twilio_whatsapp_number", None) else "not_configured"
     return {
         "stats": {
             "totalUsers": users or 0,
             "totalGroups": groups or 0,
             "totalVolume": float(volume or 0),
             "pendingVerifications": pending or 0,
+        },
+        "providers": {
+            "hubtel": hubtel,
+            "twilio": twilio,
         },
         "transactions": [
             {
