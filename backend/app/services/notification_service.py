@@ -17,7 +17,9 @@ class NotificationService:
 
     @classmethod
     async def send_whatsapp(cls, to_phone: str, message: str) -> dict:
-        """Send WhatsApp message via Twilio."""
+        """Send WhatsApp message via Twilio when configured."""
+        if not settings.twilio_account_sid or not settings.twilio_auth_token or not settings.twilio_whatsapp_number:
+            return {"success": False, "available": False, "error": "Twilio is not configured"}
         try:
             url = f"{cls.TWILIO_API_URL}/Accounts/{settings.twilio_account_sid}/Messages.json"
             payload = {
@@ -45,7 +47,9 @@ class NotificationService:
 
     @classmethod
     async def send_sms(cls, to_phone: str, message: str) -> dict:
-        """Send SMS via Twilio."""
+        """Send SMS via Twilio when configured."""
+        if not settings.twilio_account_sid or not settings.twilio_auth_token or not settings.twilio_whatsapp_number:
+            return {"success": False, "available": False, "error": "Twilio is not configured"}
         try:
             url = f"{cls.TWILIO_API_URL}/Accounts/{settings.twilio_account_sid}/Messages.json"
             payload = {
