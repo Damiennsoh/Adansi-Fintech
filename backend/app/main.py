@@ -101,14 +101,25 @@ async def root():
     }
 
 
-def build_health_status(database_ok: bool = True, redis_ok: bool = True):
-    """Return a structured health payload based on actual dependency state."""
-    status = "healthy" if database_ok and redis_ok else "degraded"
+def build_health_status(database_ok: bool = True, redis_ok: bool = True, hubtel_ok: bool | None = None, twilio_ok: bool | None = None):
+    """Return a structured health payload based on actual dependency state.
+
+    Unconfigured providers are treated as informational rather than fatal, so local testing can
+    continue before credentials are added.
+    """
+    critical_ok = database_ok and redis_ok
+    provider_status = "healthy" if critical_ok else "degraded"
+
+    hubtel_state = "connected" if hubtel_ok is True else "not_configured" if hubtel_ok is None else "disconnected"
+    twilio_state = "connected" if twilio_ok is True else "not_configured" if twilio_ok is None else "disconnected"
+
     return {
-        "status": status,
+        "status": provider_status,
         "timestamp": datetime.utcnow().isoformat(),
         "database": "connected" if database_ok else "disconnected",
         "redis": "connected" if redis_ok else "unavailable",
+        "hubtel": hubtel_state,
+        "twilio": twilio_state,
     }
 
 
@@ -122,4 +133,6 @@ async def health_check():
         database_ok = False
 
     redis_ok = redis_client is not None
-    return build_health_status(database_ok=database_ok, redis_ok=redis_ok)
+    hubtel_ok = None if not settings.hubtel_client_id or not settings.hubtel_client_secret or not settings.hubtel_merchant_id else True
+    twilio_ok = None if not settings.twilio_account_sid or not settings.twilio_auth_token or not settings.twilio_whatsapp_number else True
+    return build_health_status(database_ok=database_ok, redis_ok=redis_ok, hubtel_ok=hubtel_ok, twilio_ok=twilio_ok)

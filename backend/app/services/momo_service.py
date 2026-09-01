@@ -149,9 +149,13 @@ class MomoService:
             }
 
     async def verify_callback(self, payload: Dict[str, Any]) -> bool:
-        """Verify Hubtel callback authenticity (simplified for MVP)."""
-        # In production: verify signature header against shared secret
-        # For hackathon: check ResponseCode == "0000"
+        """Verify Hubtel callback authenticity (simplified for MVP).
+
+        If the provider is not configured, accept a basic sandbox success response so that
+        callback-driven local testing still works without external credentials.
+        """
+        if not self.client_id or not self.client_secret or not self.merchant_id:
+            return payload.get("ResponseCode") in {"0000", None}
         return payload.get("ResponseCode") == "0000"
 
 
