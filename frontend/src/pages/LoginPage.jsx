@@ -24,13 +24,16 @@ export default function LoginPage() {
 
   const handlePINLogin = async (e) => {
     e.preventDefault()
+    const formattedPhone = `+233${phone.replace(/^0/, '')}`
+    console.log('PIN Login attempt:', { phone: formattedPhone, pin })
     try {
       await loginWithPIN.mutateAsync({ 
-        phone: `+233${phone.replace(/^0/, '')}`, 
+        phone: formattedPhone, 
         pin 
       })
       navigate('/dashboard')
     } catch (err) {
+      console.error('PIN Login error:', err)
       alert('Invalid PIN. Please try again.')
     }
   }
@@ -81,7 +84,20 @@ export default function LoginPage() {
         ) : (
           <form onSubmit={handlePINLogin} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">Enter PIN</label>
+              <label className="block text-sm font-medium text-gray-300 mb-2">Phone Number</label>
+              <div className="relative">
+                <Phone className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
+                <input
+                  type="tel"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                  placeholder="024 000 0000"
+                  className="w-full pl-12 pr-4 py-4 bg-white/10 border border-white/20 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-adansi-primary"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">Enter Your PIN (4-6 digits)</label>
               <input
                 type="password"
                 inputMode="numeric"

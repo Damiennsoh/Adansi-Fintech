@@ -13,12 +13,28 @@ export const api = axios.create({
 
 api.interceptors.request.use(
   async (config) => {
-    const { data } = supabase ? await supabase.auth.getSession() : { data: { session: null } }
-    const token = data.session?.access_token || localStorage.getItem('adansi_access_token')
+    // Always check localStorage first for local JWT tokens
+    const token = localStorage.getItem('adansi_access_token')
+    
+    // Fall back to Supabase session if no local token
+    if (!token && supabase) {
+      const { data } = await supabase.auth.getSession()
+      const supabaseToken = data.session?.access_token
+      if (supabaseToken) {
+        config.headers = config.headers || {}
+        config.headers.Authorization = `Bearer ${supabaseToken}`
+        console.log('API Request interceptor: Using Supabase token')
+        return config
+      }
+    }
+    
+    console.log('API Request interceptor:', { url: config.url, hasToken: !!token, tokenPreview: token ? token.substring(0, 20) + '...' : 'none' })
+    
     if (token) {
       config.headers = config.headers || {}
       config.headers.Authorization = `Bearer ${token}`
     }
+    
     return config
   },
   (error) => Promise.reject(error)
