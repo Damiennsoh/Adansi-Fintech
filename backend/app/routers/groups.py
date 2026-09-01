@@ -317,7 +317,12 @@ async def get_group_balance(group_id: UUID, current_user: User = Depends(get_cur
     if not group:
         raise HTTPException(status_code=404, detail="Group not found")
 
-    # Get member's personal contribution
+    # Keep the balance source-of-truth aligned with the contribution/withdrawal ledger.
+    try:
+        current_balance = await group_service.reconcile_group_balance(db, group_id)
+    except ValueError:
+        current_balance = group.current_balance
+
     member_result = await db.execute(
         select(func.sum(Contribution.amount)).where(
             Contribution.group_id == group_id,
@@ -330,11 +335,32 @@ async def get_group_balance(group_id: UUID, current_user: User = Depends(get_cur
     return {
         "group_id": str(group_id),
         "group_name": group.name,
-        "balance": float(group.current_balance),
+        "balance": float(current_balance),
         "my_contribution": float(my_contribution),
         "target_amount": float(group.target_amount) if group.target_amount else None,
         "member_count": len(group.members)
     }
+
+
+@router.post("/{group_id}/reconcile")
+async def reconcile_group_balance(group_id: UUID, current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    """Recalculate the group balance from the ledger and store the result."""
+    member_check = await db.execute(
+        select(GroupMember).where(
+            GroupMember.group_id == group_id,
+            GroupMember.user_id == current_user.id,
+        )
+    )
+    if not member_check.scalar_one_or_none():
+        raise HTTPException(status_code=403, detail="You are not a member of this group")
+
+    try:
+        balance = await group_service.reconcile_group_balance(db, group_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Group not found")
+
+    await db.commit()
+    return {"group_id": str(group_id), "balance": float(balance)}
 
 
 @router.get("/{group_id}/contributions")

@@ -13,6 +13,7 @@ from app.services.notification_service import notification_service
 from app.schemas.contribution import ContributionCreateRequest, ContributionResponse, MomoCallbackPayload
 from app.models import Contribution, Group, GroupMember, User, Transaction, AuditEvent
 from app.services.history_service import mark_contribution_on_schedule, ensure_schedules_for_member
+from app.services.group_service import group_service
 
 router = APIRouter(prefix="/contributions", tags=["Contributions"])
 
@@ -133,9 +134,10 @@ async def verify_contribution(
     # Mark as completed
     contribution.status = "completed"
 
-    # Update group balance
+    # Reconcile the group balance from actual ledger totals
     group = await db.get(Group, contribution.group_id)
-    group.current_balance += contribution.amount
+    if group:
+        await group_service.reconcile_group_balance(db, contribution.group_id)
 
     # Update member totals
     member = await db.execute(
@@ -223,9 +225,10 @@ async def hubtel_callback(
         contribution.status = "completed"
         contribution.momo_transaction_id = transaction_id
 
-        # Update group balance
+        # Reconcile the group balance from actual ledger totals
         group = await db.get(Group, contribution.group_id)
-        group.current_balance += contribution.amount
+        if group:
+            await group_service.reconcile_group_balance(db, contribution.group_id)
 
         # Update member totals
         member = await db.execute(

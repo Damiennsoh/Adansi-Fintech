@@ -1,13 +1,15 @@
 """Group management service."""
 import random
 import string
+from decimal import Decimal
 from typing import Optional, List
 from uuid import UUID
 from sqlalchemy import select, func
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.database import AsyncSessionLocal
-from app.models import Group, GroupMember, User
+from app.models import Group, GroupMember, User, Contribution, Withdrawal
 
 
 class GroupService:
@@ -127,6 +129,31 @@ class GroupService:
             await session.commit()
             await session.refresh(member)
             return member
+
+    @staticmethod
+    async def reconcile_group_balance(session: AsyncSession, group_id: UUID) -> Decimal:
+        """Recalculate group current_balance from completed contributions and disbursed withdrawals."""
+        group = await session.get(Group, group_id)
+        if not group:
+            raise ValueError("Group not found")
+
+        contributions_total = await session.scalar(
+            select(func.coalesce(func.sum(Contribution.amount), 0)).where(
+                Contribution.group_id == group_id,
+                Contribution.status == "completed",
+            )
+        )
+        withdrawals_total = await session.scalar(
+            select(func.coalesce(func.sum(Withdrawal.amount), 0)).where(
+                Withdrawal.group_id == group_id,
+                Withdrawal.status == "disbursed",
+            )
+        )
+
+        balance = (Decimal(str(contributions_total or 0)) - Decimal(str(withdrawals_total or 0)))
+        group.current_balance = balance
+        await session.flush()
+        return balance
 
 
 group_service = GroupService()

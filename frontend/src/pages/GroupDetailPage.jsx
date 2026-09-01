@@ -1,10 +1,12 @@
 import { useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, Users, Copy, Share2, Phone, Wallet, ArrowUpRight, ArrowDownLeft, Clock, CheckCircle2 } from 'lucide-react'
 import { useGroupDetail } from '../hooks/useGroups'
 import { useWithdrawals } from '../hooks/useContributions'
 import { useRealtimeContributions } from '../hooks/useRealtime'
 import { formatCurrency, formatRelativeTime, getGroupColor } from '../lib/utils'
+import api from '../lib/api'
 import USSDModal from '../components/USSDModal'
 
 function ruleLabel(rule) {
@@ -24,6 +26,15 @@ export default function GroupDetailPage() {
   const [activeTab, setActiveTab] = useState(initialTab)
   const [showUSSD, setShowUSSD] = useState(false)
   const [copied, setCopied] = useState(false)
+
+  const { data: memberLedger = [] } = useQuery({
+    queryKey: ['group-ledger', id],
+    queryFn: async () => {
+      const { data } = await api.get(`/users/me/history/groups/${id}`)
+      return data.entries || []
+    },
+    enabled: !!id,
+  })
 
   useRealtimeContributions(id)
 
@@ -230,7 +241,7 @@ export default function GroupDetailPage() {
 
       <div className="px-5 mt-6">
         <div className="flex gap-1 overflow-x-auto bg-gray-100 rounded-xl p-1 scrollbar-hide">
-          {['activity', 'audit', 'members', ...(joinRequests.length ? ['requests'] : [])].map((tab) => (
+          {['activity', 'audit', 'ledger', 'members', ...(joinRequests.length ? ['requests'] : [])].map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -294,6 +305,31 @@ export default function GroupDetailPage() {
                 {event.amount != null && <span className="text-sm font-semibold">{formatCurrency(event.amount)}</span>}
               </div>
             ))}
+          </div>
+        ) : activeTab === 'ledger' ? (
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+            {memberLedger.length === 0 ? (
+              <p className="p-8 text-center text-sm text-gray-500">No contribution or benefit history yet.</p>
+            ) : memberLedger.map((entry) => {
+              const isContribution = entry.type === 'contribution'
+              return (
+                <div key={`${entry.type}-${entry.id}`} className="flex items-center gap-3 py-3 px-4 border-b border-gray-50 last:border-0">
+                  <div className={`w-10 h-10 rounded-full flex items-center justify-center ${isContribution ? 'bg-green-50' : 'bg-red-50'}`}>
+                    {isContribution ? <ArrowDownLeft className="w-5 h-5 text-green-600" /> : <ArrowUpRight className="w-5 h-5 text-red-600" />}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-gray-900 text-sm capitalize">{isContribution ? 'Contribution' : 'Benefit / Withdrawal'}</p>
+                    <p className="text-xs text-gray-500">{entry.contribution_frequency || group.contribution_frequency || 'adhoc'} • {entry.method || 'momo'} • {formatRelativeTime(entry.created_at)}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className={`font-semibold text-sm ${isContribution ? 'text-green-600' : 'text-red-600'}`}>
+                      {isContribution ? '+' : '-'}{formatCurrency(entry.amount)}
+                    </p>
+                    <span className="text-[10px] text-gray-400">{entry.status}</span>
+                  </div>
+                </div>
+              )
+            })}
           </div>
         ) : (
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
