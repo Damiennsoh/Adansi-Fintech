@@ -129,7 +129,8 @@ async def get_current_user_optional(credentials: HTTPAuthorizationCredentials = 
 
 async def require_admin(current_user: User = Depends(get_current_user)) -> User:
     """Dependency: require a platform administrator role."""
-    if getattr(current_user, "role", "user") not in ["platform_admin", "super_admin"]:
+    allowed_roles = {"platform_admin", "super_admin", "admin"}
+    if getattr(current_user, "role", "user") not in allowed_roles:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Admin access required"
