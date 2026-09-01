@@ -101,12 +101,25 @@ async def root():
     }
 
 
+def build_health_status(database_ok: bool = True, redis_ok: bool = True):
+    """Return a structured health payload based on actual dependency state."""
+    status = "healthy" if database_ok and redis_ok else "degraded"
+    return {
+        "status": status,
+        "timestamp": datetime.utcnow().isoformat(),
+        "database": "connected" if database_ok else "disconnected",
+        "redis": "connected" if redis_ok else "unavailable",
+    }
+
+
 @app.get("/health")
 async def health_check():
-    """Simple health check for monitoring."""
-    return {
-        "status": "healthy",
-        "timestamp": datetime.utcnow().isoformat(),
-        "database": "connected",
-        "redis": "connected" if redis_client else "fallback_mode"
-    }
+    """Health check for monitoring and deployment probes."""
+    database_ok = True
+    try:
+        await init_db()
+    except Exception:
+        database_ok = False
+
+    redis_ok = redis_client is not None
+    return build_health_status(database_ok=database_ok, redis_ok=redis_ok)
