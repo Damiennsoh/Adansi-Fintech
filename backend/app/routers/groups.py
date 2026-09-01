@@ -102,7 +102,40 @@ async def get_group_by_code(code: str, db: AsyncSession = Depends(get_db)):
     group = await group_service.get_group_by_code(code)
     if not group:
         raise HTTPException(status_code=404, detail="Group not found")
-    return {"id": group.id, "name": group.name, "code": group.code, "type": group.type}
+
+    member_count = len(group.members)
+    return {
+        "id": group.id,
+        "name": group.name,
+        "code": group.code,
+        "type": group.type,
+        "current_balance": float(group.current_balance or 0),
+        "members": member_count,
+        "balance": float(group.current_balance or 0),
+        "member_count": member_count,
+    }
+
+
+@router.get("/search")
+async def search_groups(query: str, db: AsyncSession = Depends(get_db)):
+    """Search groups by code or name for diaspora discovery flows."""
+    if not query or not query.strip():
+        return []
+
+    groups = await group_service.search_groups(query)
+    return [
+        {
+            "id": group.id,
+            "name": group.name,
+            "code": group.code,
+            "type": group.type,
+            "current_balance": float(group.current_balance or 0),
+            "members": len(group.members),
+            "balance": float(group.current_balance or 0),
+            "member_count": len(group.members),
+        }
+        for group in groups
+    ]
 
 
 @router.post("/{group_id}/join")

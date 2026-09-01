@@ -11,6 +11,7 @@ class ContributionCreateRequest(BaseModel):
     amount: Decimal = Field(..., ge=1, decimal_places=2)
     method: str = Field(default="momo", pattern=r"^(momo|bank|diaspora|agent_cash)$")
     network: str = Field(default="mtn", pattern=r"^(mtn|telecel|airteltigo)$")
+    payer_name: Optional[str] = Field(default=None, min_length=2, max_length=100)
 
 
 class ContributionResponse(BaseModel):

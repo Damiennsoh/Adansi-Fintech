@@ -87,6 +87,21 @@ class GroupService:
             return result.scalar_one_or_none()
 
     @staticmethod
+    async def search_groups(query: str) -> List[Group]:
+        """Search groups by name or code. Supports diaspora discovery without code-only lookup."""
+        if not query or not query.strip():
+            return []
+
+        normalized = query.strip()
+        async with AsyncSessionLocal() as session:
+            stmt = select(Group).options(selectinload(Group.members)).where(
+                (Group.name.ilike(f"%{normalized}%")) |
+                (Group.code.ilike(f"%{normalized}%"))
+            ).order_by(Group.name.asc())
+            result = await session.execute(stmt)
+            return result.scalars().all()
+
+    @staticmethod
     async def get_user_groups(user_id: UUID) -> List[Group]:
         """Get all groups a user belongs to."""
         async with AsyncSessionLocal() as session:

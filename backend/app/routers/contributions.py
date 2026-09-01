@@ -47,7 +47,11 @@ async def create_contribution(
         amount=request.amount,
         method=request.method,
         status="pending",
-        meta_data={"network": request.network},
+        meta_data={
+            "network": request.network,
+            "payer_name": request.payer_name or current_user.full_name,
+            "method": request.method,
+        },
     )
     db.add(contribution)
     await db.flush()  # Get ID without committing

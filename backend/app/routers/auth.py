@@ -21,14 +21,20 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
 @router.post("/register", status_code=status.HTTP_201_CREATED)
 async def register_user(request: UserRegisterRequest, db: AsyncSession = Depends(get_db)):
     """Register a new user. Creates Supabase Auth user + local DB record."""
-    # Check if phone already exists
-    existing = await db.execute(select(User).where(User.phone == request.phone))
-    if existing.scalar_one_or_none():
-        raise HTTPException(status_code=400, detail="Phone number already registered")
+    if request.phone:
+        existing = await db.execute(select(User).where(User.phone == request.phone))
+        if existing.scalar_one_or_none():
+            raise HTTPException(status_code=400, detail="Phone number already registered")
+    if request.email:
+        existing = await db.execute(select(User).where(User.email == request.email.lower().strip()))
+        if existing.scalar_one_or_none():
+            raise HTTPException(status_code=400, detail="Email already registered")
+
+    phone_for_auth = request.phone or f"+000{abs(hash(request.email or request.full_name)) % 1000000000:09d}"
 
     # Create Supabase Auth user (phone + PIN as password)
     supabase_result = await supabase_auth.sign_up_with_phone(
-        phone=request.phone,
+        phone=phone_for_auth,
         password=request.pin
     )
 
@@ -38,6 +44,7 @@ async def register_user(request: UserRegisterRequest, db: AsyncSession = Depends
     # Create local user record
     new_user = User(
         phone=request.phone,
+        email=request.email.lower().strip() if request.email else None,
         full_name=request.full_name,
         ghana_card_number=request.ghana_card_number,
         pin_hash=auth_service.hash_pin(request.pin),
@@ -48,9 +55,10 @@ async def register_user(request: UserRegisterRequest, db: AsyncSession = Depends
     await db.refresh(new_user)
 
     return {
-        "message": "User registered successfully. Please verify your phone with OTP.",
+        "message": "User registered successfully. Please verify your phone or continue with email-based onboarding.",
         "user_id": str(new_user.id),
-        "phone": request.phone
+        "phone": request.phone,
+        "email": new_user.email,
     }
 
 
@@ -119,30 +127,38 @@ async def login_user(request: UserLoginRequest, db: AsyncSession = Depends(get_d
     """Login with phone + PIN. Returns Supabase JWT tokens."""
     print(f"Login attempt - Phone: {request.phone}, PIN: {request.pin}")
     
-    # Check rate limiting
-    attempts = redis_service.get_pin_attempts(request.phone)
-    if attempts >= 5:
-        raise HTTPException(status_code=429, detail="Too many failed attempts. Try again in 15 minutes.")
+    identifier = request.identifier
+    if request.phone:
+        attempts = redis_service.get_pin_attempts(request.phone)
+        if attempts >= 5:
+            raise HTTPException(status_code=429, detail="Too many failed attempts. Try again in 15 minutes.")
+    else:
+        attempts = redis_service.get_pin_attempts(identifier)
+        if attempts >= 5:
+            raise HTTPException(status_code=429, detail="Too many failed attempts. Try again in 15 minutes.")
 
-    # Verify PIN against local hash
-    user_result = await db.execute(select(User).where(User.phone == request.phone))
+    user_result = await db.execute(
+        select(User).where(
+            (User.phone == request.phone) | (User.email == identifier.lower().strip())
+        )
+    )
     user = user_result.scalar_one_or_none()
-    
-    print(f"User found: {user is not None}")
+
     if user:
-        print(f"User phone: {user.phone}, PIN hash exists: {user.pin_hash is not None}")
+        print(f"User found by {user.phone or user.email}, PIN hash exists: {user.pin_hash is not None}")
 
     if not user or not auth_service.verify_pin(request.pin, user.pin_hash):
         print(f"PIN verification failed")
-        redis_service.set_pin_attempts(request.phone, attempts + 1)
-        raise HTTPException(status_code=401, detail="Invalid phone or PIN")
+        redis_service.set_pin_attempts(request.phone or identifier, attempts + 1)
+        raise HTTPException(status_code=401, detail="Invalid credentials")
 
     # Reset failed attempts
-    redis_service.set_pin_attempts(request.phone, 0)
+    redis_service.set_pin_attempts(request.phone or identifier, 0)
 
-    # Try to sign in with Supabase to get fresh tokens
+    # Try to sign in with Supabase to get fresh tokens when a Ghana phone is available.
+    login_phone = request.phone or (user.phone or f"+000{abs(hash(user.email or user.full_name)) % 1000000000:09d}")
     supabase_result = await supabase_auth.sign_in_with_phone(
-        phone=request.phone,
+        phone=login_phone,
         password=request.pin
     )
 

@@ -22,6 +22,7 @@ export default function DiasporaPage() {
   const [selectedGroup, setSelectedGroup] = useState(null)
   const [amountGHS, setAmountGHS] = useState('')
   const [currency, setCurrency] = useState('USD')
+  const [payerName, setPayerName] = useState('')
   const [searchCode, setSearchCode] = useState('')
   const [foundGroup, setFoundGroup] = useState(null)
   const [hasSearched, setHasSearched] = useState(false)
@@ -44,11 +45,31 @@ export default function DiasporaPage() {
   const total = amountGHS ? (parseFloat(amountGHS) + parseFloat(fee)).toFixed(2) : '0.00'
 
   const handleSearch = async () => {
-    if (!searchCode.trim()) return
+    const query = searchCode.trim()
+    if (!query) return
+
     setHasSearched(true)
     try {
-      const { data } = await api.get(`/groups/code/${encodeURIComponent(searchCode.trim())}`)
-      setFoundGroup(data)
+      const { data } = await api.get('/groups/search', { params: { query } })
+      const results = Array.isArray(data) ? data : []
+      const match = results[0] || null
+
+      if (match) {
+        setFoundGroup({
+          ...match,
+          members: match.member_count ?? match.members ?? 0,
+          balance: match.current_balance ?? match.balance ?? 0,
+        })
+        return
+      }
+
+      const fallback = await api.get(`/groups/code/${encodeURIComponent(query)}`)
+      const group = fallback.data
+      setFoundGroup({
+        ...group,
+        members: group.member_count ?? group.members ?? 0,
+        balance: group.current_balance ?? group.balance ?? 0,
+      })
     } catch {
       setFoundGroup(null)
     }
@@ -124,17 +145,17 @@ export default function DiasporaPage() {
       <div className="px-5 py-6 space-y-6">
         {step === 'select' && (
           <>
-            {/* Search by Code */}
+            {/* Search by name or code */}
             <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
-              <label className="block text-sm font-medium text-gray-700 mb-2">Find Group by Code</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Find Group by Name or Code</label>
               <div className="relative">
                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
                 <input
                   type="text"
                   value={searchCode}
-                  onChange={(e) => { setSearchCode(e.target.value.toUpperCase()); setFoundGroup(null) }}
-                  placeholder="e.g. FNRL01"
-                  className="w-full pl-12 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm font-mono uppercase focus:outline-none focus:border-adansi-primary"
+                  onChange={(e) => { setSearchCode(e.target.value); setFoundGroup(null) }}
+                  placeholder="e.g. Family Circle or FNRL01"
+                  className="w-full pl-12 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-adansi-primary"
                 />
               </div>
               <button
@@ -145,7 +166,7 @@ export default function DiasporaPage() {
               </button>
 
               {hasSearched && foundGroup === null && (
-                <p className="text-red-500 text-xs mt-2 text-center">Group not found. Check the code and try again.</p>
+                <p className="text-red-500 text-xs mt-2 text-center">Group not found. Try the group name, code, or a close match.</p>
               )}
 
               {foundGroup && (
@@ -226,7 +247,18 @@ export default function DiasporaPage() {
               )}
             </div>
 
-            <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 space-y-3">
+            <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-2">Payer Name</label>
+                <input
+                  type="text"
+                  value={payerName}
+                  onChange={(e) => setPayerName(e.target.value)}
+                  placeholder="Enter the name people should see"
+                  className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-adansi-primary"
+                />
+              </div>
+
               <div className="flex justify-between text-sm">
                 <span className="text-gray-500">Amount</span>
                 <span className="font-medium">GHS {amountGHS || '0.00'}</span>
@@ -249,9 +281,13 @@ export default function DiasporaPage() {
               </div>
             </div>
 
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-800">
+              For diaspora users without a Ghana SIM, create an account using your email and keep the payer name here so the group can see who sent the contribution.
+            </div>
+
             <button
               onClick={handleContribute}
-                disabled={!selectedRate || rate <= 0 || !amountGHS || parseFloat(amountGHS) <= 0}
+                disabled={!selectedRate || rate <= 0 || !amountGHS || parseFloat(amountGHS) <= 0 || !payerName.trim()}
               className="w-full bg-adansi-primary text-adansi-secondary font-bold py-4 rounded-xl disabled:opacity-50 active:scale-[0.98] transition-transform flex items-center justify-center gap-2"
             >
               Pay {currencies[currency].flag} {foreignAmount} {currency}
