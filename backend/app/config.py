@@ -1,5 +1,5 @@
 """Application configuration loaded from environment variables."""
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field
 from functools import lru_cache
 
@@ -7,22 +7,29 @@ from functools import lru_cache
 class Settings(BaseSettings):
     """Centralized app settings."""
 
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+        case_sensitive=False,
+    )
+
     # App
     app_name: str = Field(default="ADANSI", alias="APP_NAME")
     debug: bool = Field(default=False, alias="DEBUG")
-    secret_key: str = Field(alias="SECRET_KEY")
+    secret_key: str = Field(default="dev-secret-key-change-me", alias="SECRET_KEY")
 
     # Supabase
-    supabase_url: str = Field(alias="SUPABASE_URL")
-    supabase_key: str = Field(alias="SUPABASE_KEY")
-    supabase_service_role_key: str = Field(alias="SUPABASE_SERVICE_ROLE_KEY")
-    supabase_jwt_secret: str = Field(alias="SUPABASE_JWT_SECRET")
+    supabase_url: str = Field(default="https://example.supabase.co", alias="SUPABASE_URL")
+    supabase_key: str = Field(default="", alias="SUPABASE_KEY")
+    supabase_service_role_key: str = Field(default="", alias="SUPABASE_SERVICE_ROLE_KEY")
+    supabase_jwt_secret: str = Field(default="dev-supabase-jwt-secret", alias="SUPABASE_JWT_SECRET")
 
     # Database
-    database_url: str = Field(alias="DATABASE_URL")
+    database_url: str = Field(default="postgresql+asyncpg://postgres:postgres@localhost:5432/adansi", alias="DATABASE_URL")
 
     # Redis
-    redis_url: str = Field(alias="REDIS_URL")
+    redis_url: str = Field(default="redis://localhost:6379/0", alias="REDIS_URL")
 
     # Hubtel (MoMo)
     hubtel_client_id: str | None = Field(default=None, alias="HUBTEL_CLIENT_ID")
@@ -45,11 +52,7 @@ class Settings(BaseSettings):
 
     # Frontend
     frontend_url: str = Field(default="http://localhost:5173", alias="FRONTEND_URL")
-
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
-        extra = "ignore"
+    frontend_urls: str | None = Field(default=None, alias="FRONTEND_URLS")
 
 
 @lru_cache()

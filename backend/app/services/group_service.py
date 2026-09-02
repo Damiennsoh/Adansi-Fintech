@@ -1,13 +1,15 @@
 """Group management service."""
 import random
 import string
+from decimal import Decimal
 from typing import Optional, List
 from uuid import UUID
 from sqlalchemy import select, func
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.database import AsyncSessionLocal
-from app.models import Group, GroupMember, User
+from app.models import Group, GroupMember, User, Contribution, Withdrawal
 
 
 class GroupService:
@@ -77,12 +79,41 @@ class GroupService:
 
     @staticmethod
     async def get_group_by_code(code: str) -> Optional[Group]:
-        """Find group by short code."""
+        """Find group by short code, tolerating mixed case or whitespace."""
+        normalized = (code or '').strip().upper()
+        if not normalized:
+            return None
+
         async with AsyncSessionLocal() as session:
             result = await session.execute(
-                select(Group).where(Group.code == code.upper())
+                select(Group).where(func.upper(Group.code) == normalized)
+            )
+            group = result.scalar_one_or_none()
+            if group:
+                return group
+
+            result = await session.execute(
+                select(Group)
+                .where(func.upper(Group.code).like(f"%{normalized}%"))
+                .order_by(Group.name.asc())
+                .limit(1)
             )
             return result.scalar_one_or_none()
+
+    @staticmethod
+    async def search_groups(query: str) -> List[Group]:
+        """Search groups by name or code. Supports diaspora discovery without code-only lookup."""
+        if not query or not query.strip():
+            return []
+
+        normalized = query.strip()
+        async with AsyncSessionLocal() as session:
+            stmt = select(Group).options(selectinload(Group.members)).where(
+                (Group.name.ilike(f"%{normalized}%")) |
+                (Group.code.ilike(f"%{normalized}%"))
+            ).order_by(Group.name.asc())
+            result = await session.execute(stmt)
+            return result.scalars().all()
 
     @staticmethod
     async def get_user_groups(user_id: UUID) -> List[Group]:
@@ -127,6 +158,31 @@ class GroupService:
             await session.commit()
             await session.refresh(member)
             return member
+
+    @staticmethod
+    async def reconcile_group_balance(session: AsyncSession, group_id: UUID) -> Decimal:
+        """Recalculate group current_balance from completed contributions and disbursed withdrawals."""
+        group = await session.get(Group, group_id)
+        if not group:
+            raise ValueError("Group not found")
+
+        contributions_total = await session.scalar(
+            select(func.coalesce(func.sum(Contribution.amount), 0)).where(
+                Contribution.group_id == group_id,
+                Contribution.status == "completed",
+            )
+        )
+        withdrawals_total = await session.scalar(
+            select(func.coalesce(func.sum(Withdrawal.amount), 0)).where(
+                Withdrawal.group_id == group_id,
+                Withdrawal.status == "disbursed",
+            )
+        )
+
+        balance = (Decimal(str(contributions_total or 0)) - Decimal(str(withdrawals_total or 0)))
+        group.current_balance = balance
+        await session.flush()
+        return balance
 
 
 group_service = GroupService()

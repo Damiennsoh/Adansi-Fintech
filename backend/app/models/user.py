@@ -12,7 +12,8 @@ class User(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     auth_user_id = Column(UUID(as_uuid=True), unique=True, nullable=True, index=True)
-    phone = Column(String(15), unique=True, nullable=False, index=True)
+    phone = Column(String(15), unique=True, nullable=True, index=True)
+    email = Column(String(255), unique=True, nullable=True, index=True)
     ghana_card_number = Column(String(20), unique=True, nullable=True)
     ghana_card_image_url = Column(String(500), nullable=True)
     full_name = Column(String(100), nullable=False)

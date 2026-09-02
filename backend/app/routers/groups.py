@@ -54,7 +54,7 @@ async def list_my_groups(current_user: User = Depends(get_current_user), db: Asy
         select(Group, GroupMember.role)
         .join(GroupMember, Group.id == GroupMember.group_id)
         .where(GroupMember.user_id == current_user.id)
-        .options(selectinload(Group.members))
+        .options(selectinload(Group.members).selectinload(GroupMember.user))
     )
     rows = result.all()
 
@@ -72,10 +72,51 @@ async def list_my_groups(current_user: User = Depends(get_current_user), db: Asy
     ]
 
 
+@router.get("/search")
+async def search_groups(query: str, db: AsyncSession = Depends(get_db)):
+    """Search groups by code or name for diaspora discovery flows."""
+    if not query or not query.strip():
+        return []
+
+    groups = await group_service.search_groups(query)
+    return [
+        {
+            "id": group.id,
+            "name": group.name,
+            "code": group.code,
+            "type": group.type,
+            "current_balance": float(group.current_balance or 0),
+            "members": len(group.members),
+            "balance": float(group.current_balance or 0),
+            "member_count": len(group.members),
+        }
+        for group in groups
+    ]
+
+
+@router.get("/code/{code}")
+async def get_group_by_code(code: str, db: AsyncSession = Depends(get_db)):
+    """Lookup group by short code (for USSD joining)."""
+    group = await group_service.get_group_by_code(code)
+    if not group:
+        raise HTTPException(status_code=404, detail="Group not found")
+
+    member_count = len(group.members)
+    return {
+        "id": group.id,
+        "name": group.name,
+        "code": group.code,
+        "type": group.type,
+        "current_balance": float(group.current_balance or 0),
+        "members": member_count,
+        "balance": float(group.current_balance or 0),
+        "member_count": member_count,
+    }
+
+
 @router.get("/{group_id}", response_model=GroupResponse)
 async def get_group(group_id: UUID, current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """Get group details, members, and recent activity."""
-    # Verify user is member
     member_check = await db.execute(
         select(GroupMember).where(
             GroupMember.group_id == group_id,
@@ -85,20 +126,16 @@ async def get_group(group_id: UUID, current_user: User = Depends(get_current_use
     if not member_check.scalar_one_or_none():
         raise HTTPException(status_code=403, detail="You are not a member of this group")
 
-    group = await db.get(Group, group_id)
+    result = await db.execute(
+        select(Group)
+        .options(selectinload(Group.members).selectinload(GroupMember.user))
+        .where(Group.id == group_id)
+    )
+    group = result.scalar_one_or_none()
     if not group:
         raise HTTPException(status_code=404, detail="Group not found")
 
     return group
-
-
-@router.get("/code/{code}")
-async def get_group_by_code(code: str, db: AsyncSession = Depends(get_db)):
-    """Lookup group by short code (for USSD joining)."""
-    group = await group_service.get_group_by_code(code)
-    if not group:
-        raise HTTPException(status_code=404, detail="Group not found")
-    return {"id": group.id, "name": group.name, "code": group.code, "type": group.type}
 
 
 @router.post("/{group_id}/join")
@@ -313,7 +350,12 @@ async def get_group_balance(group_id: UUID, current_user: User = Depends(get_cur
     if not group:
         raise HTTPException(status_code=404, detail="Group not found")
 
-    # Get member's personal contribution
+    # Keep the balance source-of-truth aligned with the contribution/withdrawal ledger.
+    try:
+        current_balance = await group_service.reconcile_group_balance(db, group_id)
+    except ValueError:
+        current_balance = group.current_balance
+
     member_result = await db.execute(
         select(func.sum(Contribution.amount)).where(
             Contribution.group_id == group_id,
@@ -326,11 +368,32 @@ async def get_group_balance(group_id: UUID, current_user: User = Depends(get_cur
     return {
         "group_id": str(group_id),
         "group_name": group.name,
-        "balance": float(group.current_balance),
+        "balance": float(current_balance),
         "my_contribution": float(my_contribution),
         "target_amount": float(group.target_amount) if group.target_amount else None,
         "member_count": len(group.members)
     }
+
+
+@router.post("/{group_id}/reconcile")
+async def reconcile_group_balance(group_id: UUID, current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    """Recalculate the group balance from the ledger and store the result."""
+    member_check = await db.execute(
+        select(GroupMember).where(
+            GroupMember.group_id == group_id,
+            GroupMember.user_id == current_user.id,
+        )
+    )
+    if not member_check.scalar_one_or_none():
+        raise HTTPException(status_code=403, detail="You are not a member of this group")
+
+    try:
+        balance = await group_service.reconcile_group_balance(db, group_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Group not found")
+
+    await db.commit()
+    return {"group_id": str(group_id), "balance": float(balance)}
 
 
 @router.get("/{group_id}/contributions")
@@ -342,6 +405,19 @@ async def get_group_contributions(
     db: AsyncSession = Depends(get_db)
 ):
     """Paginated list of group contributions."""
+    member_check = await db.execute(
+        select(GroupMember).where(
+            GroupMember.group_id == group_id,
+            GroupMember.user_id == current_user.id,
+        )
+    )
+    if not member_check.scalar_one_or_none():
+        raise HTTPException(status_code=403, detail="You are not a member of this group")
+
+    group = await db.get(Group, group_id)
+    if not group:
+        raise HTTPException(status_code=404, detail="Group not found")
+
     result = await db.execute(
         select(Contribution)
         .where(Contribution.group_id == group_id)
@@ -362,6 +438,19 @@ async def get_group_withdrawals(
     db: AsyncSession = Depends(get_db)
 ):
     """Paginated list of group withdrawals."""
+    member_check = await db.execute(
+        select(GroupMember).where(
+            GroupMember.group_id == group_id,
+            GroupMember.user_id == current_user.id,
+        )
+    )
+    if not member_check.scalar_one_or_none():
+        raise HTTPException(status_code=403, detail="You are not a member of this group")
+
+    group = await db.get(Group, group_id)
+    if not group:
+        raise HTTPException(status_code=404, detail="Group not found")
+
     from app.models import Withdrawal
     result = await db.execute(
         select(Withdrawal)

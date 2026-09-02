@@ -8,6 +8,7 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Withdrawal, Group, GroupMember, User, Transaction, AuditEvent
+from app.services.group_service import group_service
 from app.services.momo_service import momo_service
 from app.services.notification_service import notification_service
 
@@ -96,7 +97,7 @@ async def execute_disbursement(
     withdrawal.disbursed_at = datetime.utcnow()
     withdrawal.approved_at = withdrawal.approved_at or datetime.utcnow()
     withdrawal.momo_disbursement_ref = result["reference"]
-    group.current_balance -= withdrawal.amount
+    await group_service.reconcile_group_balance(db, group.id)
 
     transaction = Transaction(
         type="withdrawal",

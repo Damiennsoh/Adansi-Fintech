@@ -71,11 +71,31 @@ class GroupMemberResponse(BaseModel):
 
     id: UUID
     user_id: UUID
-    full_name: str
+    full_name: str = ""
     role: str
     joined_at: datetime
-    total_contributed: Decimal
-    contribution_streak: int
+    total_contributed: Decimal = Decimal("0")
+    contribution_streak: int = 0
+
+    @field_validator("full_name", mode="before")
+    @classmethod
+    def extract_full_name(cls, value, info):
+        if value not in (None, ""):
+            return value
+        obj = info.data if isinstance(info.data, object) else None
+        if obj is None:
+            return ""
+        user = getattr(obj, "user", None)
+        if user is not None:
+            return getattr(user, "full_name", "")
+        return ""
+
+    @field_validator("total_contributed", mode="before")
+    @classmethod
+    def normalize_total_contributed(cls, value):
+        if value in (None, ""):
+            return Decimal("0")
+        return value
 
 
 class GroupResponse(BaseModel):
@@ -90,7 +110,7 @@ class GroupResponse(BaseModel):
     current_balance: Decimal
     status: str
     withdrawal_threshold: Decimal
-    agent_verification_required: bool
+    agent_verification_required: bool = False
     contribution_frequency: Optional[str]
     contribution_amount: Optional[Decimal]
     approval_rule: str = "any_1_treasurer"
@@ -99,6 +119,32 @@ class GroupResponse(BaseModel):
     rotation_enabled: bool = False
     created_at: datetime
     members: List[GroupMemberResponse] = []
+
+    @field_validator("agent_verification_required", "rotation_enabled", mode="before")
+    @classmethod
+    def normalize_bool(cls, value):
+        if value is None:
+            return False
+        return bool(value)
+
+    @field_validator("auto_approve_limit", mode="before")
+    @classmethod
+    def normalize_auto_approve_limit(cls, value):
+        if value in (None, ""):
+            return Decimal("0")
+        return Decimal(str(value))
+
+    @field_validator("members", mode="before")
+    @classmethod
+    def normalize_members(cls, value):
+        if value is None:
+            return []
+        if isinstance(value, list):
+            return [
+                GroupMemberResponse.model_validate(item) if not isinstance(item, dict) else GroupMemberResponse.model_validate(item)
+                for item in value
+            ]
+        return []
 
 
 class GroupListResponse(BaseModel):
@@ -109,6 +155,17 @@ class GroupListResponse(BaseModel):
     current_balance: Decimal
     my_role: str
     member_count: int
+
+
+class GroupSearchResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    name: str
+    code: str
+    type: str
+    current_balance: Decimal = Decimal("0")
+    member_count: int = 0
 
 
 class JoinGroupRequest(BaseModel):

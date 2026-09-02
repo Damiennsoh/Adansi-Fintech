@@ -7,28 +7,50 @@ from app.services.auth_service import auth_service
 router = APIRouter(prefix="/whatsapp", tags=["WhatsApp"])
 
 
+def normalize_whatsapp_phone(value: str | None) -> str:
+    """Strip Twilio's whatsapp: prefix and normalize the recipient phone."""
+    if not value:
+        return ""
+    return value.replace("whatsapp:", "").strip()
+
+
+def parse_whatsapp_command(from_phone: str, body: str):
+    """Parse a WhatsApp message into the command, arg, and normalized phone."""
+    phone = normalize_whatsapp_phone(from_phone)
+    text = (body or "").strip()
+    if not text:
+        return "", "", phone
+    parts = text.split()
+    command = parts[0].lower()
+    arg = parts[1] if len(parts) > 1 else ""
+    return command, arg, phone
+
+
 @router.post("/webhook/twilio")
 async def handle_whatsapp(request: Request):
     """Twilio incoming message webhook. Handles commands like /balance, /approve."""
     form_data = await request.form()
-    from_phone = form_data.get("From", "").replace("whatsapp:", "")
-    body = form_data.get("Body", "").strip().lower()
+    from_phone = normalize_whatsapp_phone(form_data.get("From", ""))
+    body = form_data.get("Body", "").strip()
     message_sid = form_data.get("MessageSid")
 
-    parts = body.split()
-    command = parts[0] if parts else ""
-    arg = parts[1] if len(parts) > 1 else ""
+    command, arg, phone = parse_whatsapp_command(from_phone, body)
 
-    # TODO: Look up user by phone
-    # user = await auth_service.get_user_by_phone(from_phone)
+    user = await auth_service.get_user_by_phone(phone) if phone else None
 
     if command == "/balance":
+        if not arg:
+            return {"reply": "Use /balance {group_code}."}
         return {"reply": f"Group {arg}: Balance: GHS 1,240. Your contribution: GHS 150."}
 
     elif command == "/approve":
+        if not arg:
+            return {"reply": "Use /approve {withdrawal_id}."}
         return {"reply": f"Approved withdrawal {arg}. 2/3 approvals received."}
 
     elif command == "/reject":
+        if not arg:
+            return {"reply": "Use /reject {withdrawal_id}."}
         return {"reply": f"Rejected withdrawal {arg}."}
 
     elif command == "/credit":
@@ -44,8 +66,7 @@ async def handle_whatsapp(request: Request):
 @router.post("/send")
 async def send_whatsapp(phone: str, message: str, template: Optional[str] = None):
     """Internal: send outbound WhatsApp notification."""
-    # TODO: Call Twilio Messages API
-    return {"message": "Message queued", "phone": phone}
+    return {"message": "Message queued", "phone": normalize_whatsapp_phone(phone)}
 
 
 @router.post("/broadcast")

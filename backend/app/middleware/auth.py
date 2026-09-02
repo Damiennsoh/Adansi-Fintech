@@ -13,6 +13,17 @@ settings = get_settings()
 security = HTTPBearer(auto_error=False)
 
 
+def resolve_user_lookup_values(user_id: str | None):
+    """Return UUID and phone lookup candidates from the JWT subject."""
+    if not user_id:
+        return None, None
+
+    try:
+        return UUID(user_id), None
+    except (TypeError, ValueError, AttributeError):
+        return None, user_id
+
+
 async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> User:
     """Dependency: verify JWT and return current user.
 
@@ -68,24 +79,34 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
 
     # Fetch user from database
     async with AsyncSessionLocal() as session:
+        uuid_user_id, phone_user_id = resolve_user_lookup_values(user_id)
+
         # Try by auth_user_id first (Supabase), then by id (local)
         user = None
-        try:
+        if uuid_user_id is not None:
+            try:
+                result = await session.execute(
+                    select(User).where(User.auth_user_id == uuid_user_id)
+                )
+                user = result.scalar_one_or_none()
+                print(f"Auth middleware: User found by auth_user_id: {user is not None}")
+            except Exception as e:
+                print(f"Auth middleware: Error searching by auth_user_id: {e}")
+                user = None
+
+        if not user and uuid_user_id is not None:
             result = await session.execute(
-                select(User).where(User.auth_user_id == UUID(user_id))
-            )
-            user = result.scalar_one_or_none()
-            print(f"Auth middleware: User found by auth_user_id: {user is not None}")
-        except Exception as e:
-            print(f"Auth middleware: Error searching by auth_user_id: {e}")
-            user = None
-        
-        if not user:
-            result = await session.execute(
-                select(User).where(User.id == UUID(user_id))
+                select(User).where(User.id == uuid_user_id)
             )
             user = result.scalar_one_or_none()
             print(f"Auth middleware: User found by id: {user is not None}")
+
+        if not user and phone_user_id:
+            result = await session.execute(
+                select(User).where(User.phone == phone_user_id)
+            )
+            user = result.scalar_one_or_none()
+            print(f"Auth middleware: User found by phone fallback: {user is not None}")
 
         if not user:
             print(f"Auth middleware: User not found in database")
@@ -108,7 +129,8 @@ async def get_current_user_optional(credentials: HTTPAuthorizationCredentials = 
 
 async def require_admin(current_user: User = Depends(get_current_user)) -> User:
     """Dependency: require a platform administrator role."""
-    if getattr(current_user, "role", "user") not in ["platform_admin", "super_admin"]:
+    allowed_roles = {"platform_admin", "super_admin", "admin"}
+    if getattr(current_user, "role", "user") not in allowed_roles:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Admin access required"

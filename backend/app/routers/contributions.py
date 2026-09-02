@@ -13,6 +13,7 @@ from app.services.notification_service import notification_service
 from app.schemas.contribution import ContributionCreateRequest, ContributionResponse, MomoCallbackPayload
 from app.models import Contribution, Group, GroupMember, User, Transaction, AuditEvent
 from app.services.history_service import mark_contribution_on_schedule, ensure_schedules_for_member
+from app.services.group_service import group_service
 
 router = APIRouter(prefix="/contributions", tags=["Contributions"])
 
@@ -46,7 +47,11 @@ async def create_contribution(
         amount=request.amount,
         method=request.method,
         status="pending",
-        meta_data={"network": request.network},
+        meta_data={
+            "network": request.network,
+            "payer_name": request.payer_name or current_user.full_name,
+            "method": request.method,
+        },
     )
     db.add(contribution)
     await db.flush()  # Get ID without committing
@@ -77,6 +82,94 @@ async def create_contribution(
         "amount": float(request.amount),
         "status": "pending",
         "instructions": "Please confirm the payment prompt on your phone."
+    }
+
+
+async def ensure_guest_user(db: AsyncSession, payer_name: str | None) -> User:
+    """Create a lightweight guest user for public one-time contributions without creating a group membership."""
+    guest_name = (payer_name or "Guest Contributor").strip() or "Guest Contributor"
+    result = await db.execute(
+        select(User).where(User.full_name == guest_name).order_by(User.created_at.desc()).limit(1)
+    )
+    guest = result.scalar_one_or_none()
+    if guest:
+        return guest
+
+    guest = User(full_name=guest_name, role="user", is_active=True)
+    db.add(guest)
+    await db.flush()
+    return guest
+
+
+@router.post("/guest", status_code=status.HTTP_201_CREATED)
+async def create_guest_contribution(
+    request: ContributionCreateRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """Create a contribution from a public guest link without creating a group membership."""
+    group = await db.get(Group, request.group_id)
+    if not group:
+        raise HTTPException(status_code=404, detail="Group not found")
+
+    guest_user = await ensure_guest_user(db, request.payer_name)
+
+    contribution = Contribution(
+        group_id=request.group_id,
+        user_id=guest_user.id,
+        amount=request.amount,
+        method=request.method,
+        status="completed" if request.method == "card" else "pending",
+        meta_data={
+            "network": request.network,
+            "payer_name": request.payer_name or guest_user.full_name,
+            "guest": True,
+            "method": request.method,
+        },
+    )
+    db.add(contribution)
+    await db.flush()
+
+    transaction_ref = f"ADNS-GUEST-{contribution.id.hex[:8].upper()}"
+    contribution.transaction_ref = transaction_ref
+
+    if contribution.status == "completed":
+        transaction = Transaction(
+            type="contribution",
+            reference=transaction_ref,
+            amount=contribution.amount,
+            group_id=contribution.group_id,
+            user_id=contribution.user_id,
+            status="completed",
+            external_ref=transaction_ref,
+        )
+        db.add(transaction)
+        db.add(AuditEvent(
+            group_id=contribution.group_id,
+            actor_id=None,
+            event_type="guest_contribution",
+            entity_type="contribution",
+            entity_id=contribution.id,
+            amount=contribution.amount,
+            event_metadata={
+                "reference": transaction_ref,
+                "method": contribution.method,
+                "payer_name": contribution.meta_data.get("payer_name"),
+                "guest": True,
+            },
+        ))
+        guest_user.total_contributed = (guest_user.total_contributed or 0) + contribution.amount
+        await group_service.reconcile_group_balance(db, group.id)
+
+    await db.commit()
+    await db.refresh(contribution)
+
+    return {
+        "message": "Contribution recorded",
+        "contribution_id": str(contribution.id),
+        "transaction_ref": transaction_ref,
+        "amount": float(request.amount),
+        "status": contribution.status,
+        "guest": True,
     }
 
 
@@ -133,9 +226,10 @@ async def verify_contribution(
     # Mark as completed
     contribution.status = "completed"
 
-    # Update group balance
+    # Reconcile the group balance from actual ledger totals
     group = await db.get(Group, contribution.group_id)
-    group.current_balance += contribution.amount
+    if group:
+        await group_service.reconcile_group_balance(db, contribution.group_id)
 
     # Update member totals
     member = await db.execute(
@@ -223,9 +317,10 @@ async def hubtel_callback(
         contribution.status = "completed"
         contribution.momo_transaction_id = transaction_id
 
-        # Update group balance
+        # Reconcile the group balance from actual ledger totals
         group = await db.get(Group, contribution.group_id)
-        group.current_balance += contribution.amount
+        if group:
+            await group_service.reconcile_group_balance(db, contribution.group_id)
 
         # Update member totals
         member = await db.execute(

@@ -15,6 +15,19 @@ from app.routers import (
 
 settings = get_settings()
 
+allowed_origins = {
+    origin.strip()
+    for origin in [
+        settings.frontend_url,
+        *(settings.frontend_urls.split(',') if settings.frontend_urls else []),
+        'http://localhost:3000',
+        'http://localhost:5173',
+        'https://adansi-fintech.vercel.app',
+        'https://adansi.app',
+    ]
+    if origin and origin.strip()
+}
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -42,13 +55,8 @@ app = FastAPI(
 # CORS: Allow frontend origin
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        settings.frontend_url,
-        "http://localhost:3000",
-        "http://localhost:5173",
-        "https://adansi-fintech.vercel.app",
-        "https://adansi.app"
-    ],
+    allow_origins=sorted(allowed_origins),
+    allow_origin_regex=r"https:\/\/(.*\.)?(vercel\.app|netlify\.app|githubpreview\.dev)|http:\/\/localhost(:\d+)?",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -93,12 +101,38 @@ async def root():
     }
 
 
+def build_health_status(database_ok: bool = True, redis_ok: bool = True, hubtel_ok: bool | None = None, twilio_ok: bool | None = None):
+    """Return a structured health payload based on actual dependency state.
+
+    Unconfigured providers are treated as informational rather than fatal, so local testing can
+    continue before credentials are added.
+    """
+    critical_ok = database_ok and redis_ok
+    provider_status = "healthy" if critical_ok else "degraded"
+
+    hubtel_state = "connected" if hubtel_ok is True else "not_configured" if hubtel_ok is None else "disconnected"
+    twilio_state = "connected" if twilio_ok is True else "not_configured" if twilio_ok is None else "disconnected"
+
+    return {
+        "status": provider_status,
+        "timestamp": datetime.utcnow().isoformat(),
+        "database": "connected" if database_ok else "disconnected",
+        "redis": "connected" if redis_ok else "unavailable",
+        "hubtel": hubtel_state,
+        "twilio": twilio_state,
+    }
+
+
 @app.get("/health")
 async def health_check():
-    """Simple health check for monitoring."""
-    return {
-        "status": "healthy",
-        "timestamp": datetime.utcnow().isoformat(),
-        "database": "connected",
-        "redis": "connected" if redis_client else "fallback_mode"
-    }
+    """Health check for monitoring and deployment probes."""
+    database_ok = True
+    try:
+        await init_db()
+    except Exception:
+        database_ok = False
+
+    redis_ok = redis_client is not None
+    hubtel_ok = None if not settings.hubtel_client_id or not settings.hubtel_client_secret or not settings.hubtel_merchant_id else True
+    twilio_ok = None if not settings.twilio_account_sid or not settings.twilio_auth_token or not settings.twilio_whatsapp_number else True
+    return build_health_status(database_ok=database_ok, redis_ok=redis_ok, hubtel_ok=hubtel_ok, twilio_ok=twilio_ok)

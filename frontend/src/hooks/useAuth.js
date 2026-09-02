@@ -31,15 +31,16 @@ export function useAuth() {
   })
 
   const loginWithPIN = useMutation({
-    mutationFn: async ({ phone, pin }) => {
-      console.log('useAuth loginWithPIN called with:', { phone, pin })
-      const { data } = await api.post('/auth/login', { phone, pin })
-      console.log('Login response:', data)
+    mutationFn: async ({ phone, email, pin }) => {
+      const payload = { pin }
+      if (phone) payload.phone = phone
+      if (email) payload.email = email
+
+      const { data } = await api.post('/auth/login', payload)
       if (data.access_token) {
         setTokens(data.access_token, data.refresh_token)
       }
       const { data: userData } = await api.get('/users/me')
-      console.log('User data:', userData)
       setUser(userData)
       return userData
     },

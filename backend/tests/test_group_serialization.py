@@ -1,0 +1,168 @@
+from datetime import datetime
+from uuid import uuid4
+from types import SimpleNamespace
+
+from fastapi.testclient import TestClient
+
+from app.main import app
+from app.models.group import Group, GroupMember
+from app.models.user import User
+from app.schemas.auth import UserRegisterRequest
+from app.schemas.contribution import ContributionCreateRequest
+from app.schemas.group import GroupResponse, GroupMemberResponse, GroupSearchResponse
+
+
+def test_group_member_response_uses_member_user_full_name():
+    user = User(
+        id=uuid4(),
+        phone="+233240000000",
+        full_name="Ada Mensah",
+        role="user",
+        is_verified=True,
+    )
+    member = GroupMember(
+        id=uuid4(),
+        group_id=uuid4(),
+        user_id=user.id,
+        role="admin",
+        joined_at=datetime.utcnow(),
+        total_contributed=0,
+        contribution_streak=0,
+        user=user,
+    )
+
+    payload = GroupMemberResponse.model_validate(member)
+
+    assert payload.full_name == "Ada Mensah"
+    assert payload.role == "admin"
+
+
+def test_group_response_includes_member_details():
+    user = User(
+        id=uuid4(),
+        phone="+233240000001",
+        full_name="Kwame Boateng",
+        role="user",
+        is_verified=True,
+    )
+    group = Group(
+        id=uuid4(),
+        name="Test Group",
+        code="ABCD12",
+        type="savings",
+        created_by=user.id,
+        current_balance=250,
+        status="active",
+        withdrawal_threshold=500,
+        approval_rule="any_1_treasurer",
+        join_type="approval_required",
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
+        members=[
+            GroupMember(
+                id=uuid4(),
+                group_id=uuid4(),
+                user_id=user.id,
+                role="admin",
+                joined_at=datetime.utcnow(),
+                total_contributed=100,
+                contribution_streak=2,
+                user=user,
+            )
+        ],
+    )
+
+    payload = GroupResponse.model_validate(group)
+
+    assert payload.name == "Test Group"
+    assert payload.members[0].full_name == "Kwame Boateng"
+    assert payload.members[0].role == "admin"
+
+
+def test_user_register_request_allows_email_based_diaspora_signup():
+    payload = UserRegisterRequest.model_validate({
+        "email": "diaspora@example.com",
+        "full_name": "Ama Boateng",
+        "pin": "1234",
+    })
+
+    assert payload.email == "diaspora@example.com"
+    assert payload.full_name == "Ama Boateng"
+
+
+def test_contribution_request_accepts_payer_name_and_metadata():
+    payload = ContributionCreateRequest.model_validate({
+        "group_id": "11111111-1111-4111-8111-111111111111",
+        "amount": 50.00,
+        "method": "diaspora",
+        "payer_name": "Kofi Mensah",
+    })
+
+    assert payload.payer_name == "Kofi Mensah"
+    assert payload.method == "diaspora"
+
+
+def test_group_search_response_uses_name_and_code_fields():
+    payload = GroupSearchResponse.model_validate({
+        "id": "11111111-1111-4111-8111-111111111111",
+        "name": "Accra Savings Circle",
+        "code": "ACCRA1",
+        "type": "savings",
+        "current_balance": 100.50,
+        "member_count": 12,
+    })
+
+    assert payload.name == "Accra Savings Circle"
+    assert payload.code == "ACCRA1"
+    assert payload.member_count == 12
+
+
+def test_group_search_endpoint_accepts_name_and_code_queries(monkeypatch):
+    client = TestClient(app)
+
+    fake_group = SimpleNamespace(
+        id=uuid4(),
+        name="FAMILY CIRCLE",
+        code="FMLY77",
+        type="savings",
+        current_balance=420.5,
+        members=[object(), object()],
+    )
+
+    monkeypatch.setattr('app.routers.groups.group_service.search_groups', lambda query: [fake_group])
+
+    response = client.get('/api/v1/groups/search', params={'query': 'family'})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload[0]['name'] == 'FAMILY CIRCLE'
+    assert payload[0]['code'] == 'FMLY77'
+    assert payload[0]['member_count'] == 2
+
+
+def test_group_lookup_accepts_lowercase_and_whitespace_codes(monkeypatch):
+    group = Group(
+        id=uuid4(),
+        name="Accra Circle",
+        code="ACR12Q",
+        type="savings",
+        created_by=uuid4(),
+        current_balance=100,
+        status="active",
+        withdrawal_threshold=500,
+        approval_rule="any_1_treasurer",
+        join_type="approval_required",
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
+    )
+
+    class FakeSession:
+        async def execute(self, stmt):
+            return SimpleNamespace(scalar_one_or_none=lambda: group)
+
+    monkeypatch.setattr('app.services.group_service.AsyncSessionLocal', lambda: FakeSession())
+
+    result = __import__('app.services.group_service', fromlist=['group_service']).group_service.get_group_by_code('  acr12q  ')
+
+    assert result is not None
+    assert result.code == 'ACR12Q'

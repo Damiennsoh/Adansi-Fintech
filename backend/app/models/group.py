@@ -58,6 +58,10 @@ class GroupMember(Base):
     group = relationship("Group", back_populates="members")
     user = relationship("User", back_populates="memberships")
 
+    @property
+    def full_name(self) -> str:
+        return self.user.full_name if self.user else ""
+
     __table_args__ = (
         Index("idx_gm_group", "group_id"),
         Index("idx_gm_user", "user_id"),

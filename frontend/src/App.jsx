@@ -10,6 +10,7 @@ import LoadingScreen from './components/LoadingScreen'
 import LoginPage from './pages/LoginPage'
 import VerifyOTPPage from './pages/VerifyOTPPage'
 import SetupPINPage from './pages/SetupPINPage'
+import PublicGuestContributionPage from './pages/PublicGuestContributionPage'
 import DashboardPage from './pages/DashboardPage'
 import GroupsPage from './pages/GroupsPage'
 import GroupDetailPage from './pages/GroupDetailPage'
@@ -20,7 +21,6 @@ import WithdrawPage from './pages/WithdrawPage'
 import CreditPage from './pages/CreditPage'
 import ProfilePage from './pages/ProfilePage'
 import NotificationsPage from './pages/NotificationsPage'
-import DiasporaPage from './pages/DiasporaPage'
 import MarketplacePage from './pages/MarketplacePage'
 import AdminDashboardPage from './pages/AdminDashboardPage'
 import ProfileSetupPage from './pages/ProfileSetupPage'
@@ -66,6 +66,7 @@ export default function App() {
             <Route path="/verify-otp" element={<VerifyOTPPage />} />
             <Route path="/setup-profile" element={<ProfileSetupPage />} />
             <Route path="/setup-pin" element={<SetupPINPage />} />
+            <Route path="/g/:code" element={<PublicGuestContributionPage />} />
             <Route path="/agent-verify-demo" element={<AgentVerifyMockPage />} />
 
             {/* Protected routes */}
@@ -81,7 +82,7 @@ export default function App() {
               <Route path="/history" element={<ContributionHistoryPage />} />
               <Route path="/profile" element={<ProfilePage />} />
               <Route path="/notifications" element={<NotificationsPage />} />
-              <Route path="/diaspora" element={<DiasporaPage />} />
+              <Route path="/diaspora" element={<Navigate to="/groups" replace />} />
               <Route path="/marketplace" element={<MarketplacePage />} />
               <Route path="/admin" element={<AdminRoute><AdminDashboardPage /></AdminRoute>} />
             </Route>
