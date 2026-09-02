@@ -20,7 +20,6 @@ import WithdrawPage from './pages/WithdrawPage'
 import CreditPage from './pages/CreditPage'
 import ProfilePage from './pages/ProfilePage'
 import NotificationsPage from './pages/NotificationsPage'
-import DiasporaPage from './pages/DiasporaPage'
 import MarketplacePage from './pages/MarketplacePage'
 import AdminDashboardPage from './pages/AdminDashboardPage'
 import ProfileSetupPage from './pages/ProfileSetupPage'
@@ -81,7 +80,7 @@ export default function App() {
               <Route path="/history" element={<ContributionHistoryPage />} />
               <Route path="/profile" element={<ProfilePage />} />
               <Route path="/notifications" element={<NotificationsPage />} />
-              <Route path="/diaspora" element={<DiasporaPage />} />
+              <Route path="/diaspora" element={<Navigate to="/groups" replace />} />
               <Route path="/marketplace" element={<MarketplacePage />} />
               <Route path="/admin" element={<AdminRoute><AdminDashboardPage /></AdminRoute>} />
             </Route>

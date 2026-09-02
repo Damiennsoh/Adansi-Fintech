@@ -1,11 +1,10 @@
 import { Link, useLocation } from 'react-router-dom'
-import { Home, Users, TrendingUp, User, Globe, ShoppingBag } from 'lucide-react'
+import { Home, Users, User, ShoppingBag } from 'lucide-react'
 import { cn } from '../lib/utils'
 
 const navItems = [
   { path: '/dashboard', label: 'Home', icon: Home },
   { path: '/groups', label: 'Groups', icon: Users },
-  { path: '/diaspora', label: 'Diaspora', icon: Globe },
   { path: '/marketplace', label: 'Market', icon: ShoppingBag },
   { path: '/profile', label: 'Profile', icon: User },
 ]
