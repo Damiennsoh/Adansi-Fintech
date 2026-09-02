@@ -93,7 +93,7 @@ export default function LoginPage() {
                 onClick={() => setPhoneAction('otp')}
                 className={`py-2.5 rounded-lg text-sm font-medium transition ${phoneAction === 'otp' ? 'bg-adansi-primary text-adansi-secondary' : 'text-gray-300'}`}
               >
-                Send OTP
+                OTP login
               </button>
               <button
                 type="button"
@@ -105,7 +105,7 @@ export default function LoginPage() {
             </div>
 
             <p className="text-xs text-gray-400">
-              Ghana users can sign in with their phone number and PIN, or verify with OTP.
+              Use OTP for first-time access or if you do not have a PIN yet. Returning users can sign in faster with their PIN.
             </p>
 
             {phoneAction === 'otp' ? (
@@ -129,7 +129,7 @@ export default function LoginPage() {
                   disabled={sendOTP.isPending || phone.length < 9}
                   className="w-full bg-adansi-primary text-adansi-secondary font-bold py-4 rounded-xl disabled:opacity-50 active:scale-[0.98] transition-transform flex items-center justify-center gap-2"
                 >
-                  {sendOTP.isPending ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Send OTP'}
+                  {sendOTP.isPending ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Send verification code'}
                 </button>
               </form>
             ) : (
@@ -183,9 +183,6 @@ export default function LoginPage() {
               </form>
             )}
 
-            <button type="button" onClick={() => setMode('email')} className="text-gray-300 hover:text-white text-sm">
-              Use email instead
-            </button>
           </div>
         ) : (
           <div className="space-y-4">
