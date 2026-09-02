@@ -153,7 +153,7 @@ export default function DiasporaPage() {
                 <input
                   type="text"
                   value={searchCode}
-                  onChange={(e) => { setSearchCode(e.target.value); setFoundGroup(null) }}
+                  onChange={(e) => { setSearchCode(e.target.value); setFoundGroup(null); setHasSearched(false) }}
                   placeholder="e.g. Family Circle or FNRL01"
                   className="w-full pl-12 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-adansi-primary"
                 />
@@ -259,17 +259,19 @@ export default function DiasporaPage() {
                 />
               </div>
 
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-500">Amount</span>
-                <span className="font-medium">GHS {amountGHS || '0.00'}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-500">Service Fee (1%)</span>
-                <span className="font-medium">GHS {fee}</span>
-              </div>
-              <div className="border-t border-gray-100 pt-3 flex justify-between">
-                <span className="font-bold text-gray-900">Total</span>
-                <span className="font-bold text-gray-900">GHS {total}</span>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Amount</span>
+                  <span className="font-medium">GHS {amountGHS || '0.00'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Service Fee (1%)</span>
+                  <span className="font-medium">GHS {fee}</span>
+                </div>
+                <div className="border-t border-gray-100 pt-3 flex justify-between">
+                  <span className="font-bold text-gray-900">Total</span>
+                  <span className="font-bold text-gray-900">GHS {total}</span>
+                </div>
               </div>
             </div>
 

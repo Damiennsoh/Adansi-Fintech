@@ -1,6 +1,10 @@
 from datetime import datetime
 from uuid import uuid4
+from types import SimpleNamespace
 
+from fastapi.testclient import TestClient
+
+from app.main import app
 from app.models.group import Group, GroupMember
 from app.models.user import User
 from app.schemas.auth import UserRegisterRequest
@@ -111,3 +115,26 @@ def test_group_search_response_uses_name_and_code_fields():
     assert payload.name == "Accra Savings Circle"
     assert payload.code == "ACCRA1"
     assert payload.member_count == 12
+
+
+def test_group_search_endpoint_accepts_name_and_code_queries(monkeypatch):
+    client = TestClient(app)
+
+    fake_group = SimpleNamespace(
+        id=uuid4(),
+        name="FAMILY CIRCLE",
+        code="FMLY77",
+        type="savings",
+        current_balance=420.5,
+        members=[object(), object()],
+    )
+
+    monkeypatch.setattr('app.routers.groups.group_service.search_groups', lambda query: [fake_group])
+
+    response = client.get('/api/v1/groups/search', params={'query': 'family'})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload[0]['name'] == 'FAMILY CIRCLE'
+    assert payload[0]['code'] == 'FMLY77'
+    assert payload[0]['member_count'] == 2

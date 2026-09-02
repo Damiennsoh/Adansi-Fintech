@@ -72,28 +72,26 @@ async def list_my_groups(current_user: User = Depends(get_current_user), db: Asy
     ]
 
 
-@router.get("/{group_id}", response_model=GroupResponse)
-async def get_group(group_id: UUID, current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    """Get group details, members, and recent activity."""
-    member_check = await db.execute(
-        select(GroupMember).where(
-            GroupMember.group_id == group_id,
-            GroupMember.user_id == current_user.id
-        )
-    )
-    if not member_check.scalar_one_or_none():
-        raise HTTPException(status_code=403, detail="You are not a member of this group")
+@router.get("/search")
+async def search_groups(query: str, db: AsyncSession = Depends(get_db)):
+    """Search groups by code or name for diaspora discovery flows."""
+    if not query or not query.strip():
+        return []
 
-    result = await db.execute(
-        select(Group)
-        .options(selectinload(Group.members).selectinload(GroupMember.user))
-        .where(Group.id == group_id)
-    )
-    group = result.scalar_one_or_none()
-    if not group:
-        raise HTTPException(status_code=404, detail="Group not found")
-
-    return group
+    groups = await group_service.search_groups(query)
+    return [
+        {
+            "id": group.id,
+            "name": group.name,
+            "code": group.code,
+            "type": group.type,
+            "current_balance": float(group.current_balance or 0),
+            "members": len(group.members),
+            "balance": float(group.current_balance or 0),
+            "member_count": len(group.members),
+        }
+        for group in groups
+    ]
 
 
 @router.get("/code/{code}")
@@ -116,26 +114,28 @@ async def get_group_by_code(code: str, db: AsyncSession = Depends(get_db)):
     }
 
 
-@router.get("/search")
-async def search_groups(query: str, db: AsyncSession = Depends(get_db)):
-    """Search groups by code or name for diaspora discovery flows."""
-    if not query or not query.strip():
-        return []
+@router.get("/{group_id}", response_model=GroupResponse)
+async def get_group(group_id: UUID, current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    """Get group details, members, and recent activity."""
+    member_check = await db.execute(
+        select(GroupMember).where(
+            GroupMember.group_id == group_id,
+            GroupMember.user_id == current_user.id
+        )
+    )
+    if not member_check.scalar_one_or_none():
+        raise HTTPException(status_code=403, detail="You are not a member of this group")
 
-    groups = await group_service.search_groups(query)
-    return [
-        {
-            "id": group.id,
-            "name": group.name,
-            "code": group.code,
-            "type": group.type,
-            "current_balance": float(group.current_balance or 0),
-            "members": len(group.members),
-            "balance": float(group.current_balance or 0),
-            "member_count": len(group.members),
-        }
-        for group in groups
-    ]
+    result = await db.execute(
+        select(Group)
+        .options(selectinload(Group.members).selectinload(GroupMember.user))
+        .where(Group.id == group_id)
+    )
+    group = result.scalar_one_or_none()
+    if not group:
+        raise HTTPException(status_code=404, detail="Group not found")
+
+    return group
 
 
 @router.post("/{group_id}/join")

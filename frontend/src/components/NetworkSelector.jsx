@@ -18,23 +18,15 @@ export default function NetworkSelector({ value, onChange, label = 'Mobile Money
   return (
     <div className="min-w-0">
       <label className="block text-sm font-medium text-gray-700 mb-2">{label}</label>
-      <div className="flex flex-col gap-2 sm:grid sm:grid-cols-3 sm:gap-2">
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl text-sm text-gray-700 focus:outline-none focus:border-adansi-primary"
+      >
         {NETWORKS.map((n) => (
-          <button
-            key={n.value}
-            type="button"
-            onClick={() => onChange(n.value)}
-            className={`w-full py-3 px-3 rounded-xl text-sm font-semibold border-2 transition-all text-left sm:text-center break-words ${
-              value === n.value
-                ? 'border-adansi-primary bg-adansi-primary/10 text-adansi-secondary'
-                : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
-            }`}
-          >
-            <span className="sm:hidden">{n.label}</span>
-            <span className="hidden sm:inline">{n.short}</span>
-          </button>
+          <option key={n.value} value={n.value}>{n.label}</option>
         ))}
-      </div>
+      </select>
     </div>
   )
 }
