@@ -138,3 +138,31 @@ def test_group_search_endpoint_accepts_name_and_code_queries(monkeypatch):
     assert payload[0]['name'] == 'FAMILY CIRCLE'
     assert payload[0]['code'] == 'FMLY77'
     assert payload[0]['member_count'] == 2
+
+
+def test_group_lookup_accepts_lowercase_and_whitespace_codes(monkeypatch):
+    group = Group(
+        id=uuid4(),
+        name="Accra Circle",
+        code="ACR12Q",
+        type="savings",
+        created_by=uuid4(),
+        current_balance=100,
+        status="active",
+        withdrawal_threshold=500,
+        approval_rule="any_1_treasurer",
+        join_type="approval_required",
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
+    )
+
+    class FakeSession:
+        async def execute(self, stmt):
+            return SimpleNamespace(scalar_one_or_none=lambda: group)
+
+    monkeypatch.setattr('app.services.group_service.AsyncSessionLocal', lambda: FakeSession())
+
+    result = __import__('app.services.group_service', fromlist=['group_service']).group_service.get_group_by_code('  acr12q  ')
+
+    assert result is not None
+    assert result.code == 'ACR12Q'

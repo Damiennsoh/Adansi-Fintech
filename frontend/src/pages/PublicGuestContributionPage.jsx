@@ -19,13 +19,40 @@ export default function PublicGuestContributionPage() {
   useEffect(() => {
     const fetchGroup = async () => {
       try {
-        const { data } = await api.get(`/groups/code/${code}`)
-        setGroup(data)
+        const normalizedCode = (code || '').trim()
+        if (!normalizedCode) {
+          throw new Error('Missing group code')
+        }
+
+        const directResponse = await api.get(`/groups/code/${encodeURIComponent(normalizedCode)}`)
+        setGroup(directResponse.data)
         if (searchParams.get('name')) {
           setPayerName(searchParams.get('name'))
         }
-      } catch (err) {
-        setError('This group link is invalid or no longer available.')
+        return
+      } catch (directError) {
+        try {
+          const fallbackResponse = await api.get('/groups/search', {
+            params: { query: code || searchParams.get('name') || '' },
+          })
+          const matches = Array.isArray(fallbackResponse.data) ? fallbackResponse.data : []
+          const match = matches.find((item) => {
+            const matchCode = String(item.code || '').toUpperCase()
+            const requestedCode = String(code || '').toUpperCase()
+            return matchCode === requestedCode || matchCode.includes(requestedCode)
+          }) || matches[0]
+
+          if (!match) {
+            throw directError
+          }
+
+          setGroup(match)
+          if (searchParams.get('name')) {
+            setPayerName(searchParams.get('name'))
+          }
+        } catch (fallbackError) {
+          setError('This group link is invalid or no longer available.')
+        }
       } finally {
         setLoading(false)
       }

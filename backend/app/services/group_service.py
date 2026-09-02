@@ -79,10 +79,24 @@ class GroupService:
 
     @staticmethod
     async def get_group_by_code(code: str) -> Optional[Group]:
-        """Find group by short code."""
+        """Find group by short code, tolerating mixed case or whitespace."""
+        normalized = (code or '').strip().upper()
+        if not normalized:
+            return None
+
         async with AsyncSessionLocal() as session:
             result = await session.execute(
-                select(Group).where(Group.code == code.upper())
+                select(Group).where(func.upper(Group.code) == normalized)
+            )
+            group = result.scalar_one_or_none()
+            if group:
+                return group
+
+            result = await session.execute(
+                select(Group)
+                .where(func.upper(Group.code).like(f"%{normalized}%"))
+                .order_by(Group.name.asc())
+                .limit(1)
             )
             return result.scalar_one_or_none()
 
