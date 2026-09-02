@@ -6,6 +6,7 @@ import api from '../lib/api'
 
 export default function LoginPage() {
   const [mode, setMode] = useState('phone')
+  const [phoneAction, setPhoneAction] = useState('otp')
   const [phone, setPhone] = useState('')
   const [email, setEmail] = useState('')
   const [fullName, setFullName] = useState('')
@@ -85,109 +86,175 @@ export default function LoginPage() {
         </div>
 
         {mode === 'phone' ? (
-          <>
-            <form onSubmit={handleSendOTP} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">Phone Number</label>
-                <div className="relative">
-                  <Phone className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-2 rounded-xl bg-white/5 p-1 border border-white/10">
+              <button
+                type="button"
+                onClick={() => setPhoneAction('otp')}
+                className={`py-2.5 rounded-lg text-sm font-medium transition ${phoneAction === 'otp' ? 'bg-adansi-primary text-adansi-secondary' : 'text-gray-300'}`}
+              >
+                Send OTP
+              </button>
+              <button
+                type="button"
+                onClick={() => setPhoneAction('pin')}
+                className={`py-2.5 rounded-lg text-sm font-medium transition ${phoneAction === 'pin' ? 'bg-adansi-primary text-adansi-secondary' : 'text-gray-300'}`}
+              >
+                Login with PIN
+              </button>
+            </div>
+
+            <p className="text-xs text-gray-400">
+              Ghana users can sign in with their phone number and PIN, or verify with OTP.
+            </p>
+
+            {phoneAction === 'otp' ? (
+              <form onSubmit={handleSendOTP} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">Phone Number</label>
+                  <div className="relative">
+                    <Phone className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
+                    <input
+                      type="tel"
+                      value={phone}
+                      onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                      placeholder="024 000 0000"
+                      className="w-full pl-12 pr-4 py-4 bg-white/10 border border-white/20 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-adansi-primary"
+                    />
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={sendOTP.isPending || phone.length < 9}
+                  className="w-full bg-adansi-primary text-adansi-secondary font-bold py-4 rounded-xl disabled:opacity-50 active:scale-[0.98] transition-transform flex items-center justify-center gap-2"
+                >
+                  {sendOTP.isPending ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Send OTP'}
+                </button>
+              </form>
+            ) : (
+              <form onSubmit={handlePINLogin} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">Phone Number</label>
+                  <div className="relative">
+                    <Phone className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
+                    <input
+                      type="tel"
+                      value={phone}
+                      onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                      placeholder="024 000 0000"
+                      className="w-full pl-12 pr-4 py-4 bg-white/10 border border-white/20 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-adansi-primary"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">Enter your PIN</label>
                   <input
-                    type="tel"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
-                    placeholder="024 000 0000"
+                    type="password"
+                    inputMode="numeric"
+                    maxLength={6}
+                    value={pin}
+                    onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    placeholder="••••••"
+                    className="w-full px-4 py-4 bg-white/10 border border-white/20 rounded-xl text-white text-center text-2xl tracking-[0.5em] placeholder-gray-600 focus:outline-none focus:border-adansi-primary"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={loginWithPIN.isPending || pin.length < 4 || phone.length < 9}
+                  className="w-full bg-adansi-primary text-adansi-secondary font-bold py-4 rounded-xl disabled:opacity-50 active:scale-[0.98] transition-transform flex items-center justify-center gap-2"
+                >
+                  {loginWithPIN.isPending ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Login'}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const targetPhone = phone ? `+233${phone.replace(/^0/, '')}` : '+233240000000'
+                    sendOTP.mutate(targetPhone)
+                    navigate('/verify-otp', { state: { phone: targetPhone, mode: 'reset' } })
+                  }}
+                  className="w-full text-sm text-adansi-primary hover:underline"
+                >
+                  Forgot PIN?
+                </button>
+              </form>
+            )}
+
+            <button type="button" onClick={() => setMode('email')} className="text-gray-300 hover:text-white text-sm">
+              Use email instead
+            </button>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <div className="rounded-xl border border-white/10 bg-white/5 p-3 text-xs text-gray-300">
+              Diaspora users can create an account with email and keep the payer name visible for group contributions.
+            </div>
+
+            <form onSubmit={handleEmailRegister} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">Full Name</label>
+                <div className="relative">
+                  <UserRound className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
+                  <input
+                    type="text"
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
+                    placeholder="Ama Boateng"
                     className="w-full pl-12 pr-4 py-4 bg-white/10 border border-white/20 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-adansi-primary"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">Email Address</label>
+                <div className="relative">
+                  <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="you@example.com"
+                    className="w-full pl-12 pr-4 py-4 bg-white/10 border border-white/20 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-adansi-primary"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">Create PIN</label>
+                <div className="relative">
+                  <LockKeyhole className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
+                  <input
+                    type="password"
+                    inputMode="numeric"
+                    maxLength={6}
+                    value={pin}
+                    onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    placeholder="••••"
+                    className="w-full pl-12 pr-4 py-4 bg-white/10 border border-white/20 rounded-xl text-white text-center tracking-[0.4em] placeholder-gray-500 focus:outline-none focus:border-adansi-primary"
                   />
                 </div>
               </div>
 
               <button
                 type="submit"
-                disabled={sendOTP.isPending || phone.length < 9}
+                disabled={loginWithPIN.isPending || !email || !fullName || pin.length < 4}
                 className="w-full bg-adansi-primary text-adansi-secondary font-bold py-4 rounded-xl disabled:opacity-50 active:scale-[0.98] transition-transform flex items-center justify-center gap-2"
               >
-                {sendOTP.isPending ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Send OTP'}
+                {loginWithPIN.isPending ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Create Email Account'}
               </button>
-            </form>
 
-            <div className="mt-4 flex justify-between items-center text-xs">
-              <button type="button" onClick={() => setMode('email')} className="text-gray-300 hover:text-white">Use email instead</button>
               <button
                 type="button"
-                onClick={() => {
-                  const targetPhone = phone ? `+233${phone.replace(/^0/, '')}` : '+233240000000'
-                  sendOTP.mutate(targetPhone)
-                  navigate('/verify-otp', { state: { phone: targetPhone, mode: 'reset' } })
-                }}
-                className="text-adansi-primary hover:underline"
+                onClick={() => setMode('phone')}
+                className="w-full text-gray-300 text-sm py-2 hover:text-white transition-colors"
               >
-                Forgot PIN?
+                Back to phone login
               </button>
-            </div>
-          </>
-        ) : (
-          <form onSubmit={handleEmailRegister} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">Full Name</label>
-              <div className="relative">
-                <UserRound className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
-                <input
-                  type="text"
-                  value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
-                  placeholder="Ama Boateng"
-                  className="w-full pl-12 pr-4 py-4 bg-white/10 border border-white/20 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-adansi-primary"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">Email Address</label>
-              <div className="relative">
-                <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="you@example.com"
-                  className="w-full pl-12 pr-4 py-4 bg-white/10 border border-white/20 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-adansi-primary"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">Create PIN</label>
-              <div className="relative">
-                <LockKeyhole className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
-                <input
-                  type="password"
-                  inputMode="numeric"
-                  maxLength={6}
-                  value={pin}
-                  onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                  placeholder="••••"
-                  className="w-full pl-12 pr-4 py-4 bg-white/10 border border-white/20 rounded-xl text-white text-center tracking-[0.4em] placeholder-gray-500 focus:outline-none focus:border-adansi-primary"
-                />
-              </div>
-            </div>
-
-            <button
-              type="submit"
-              disabled={loginWithPIN.isPending || !email || !fullName || pin.length < 4}
-              className="w-full bg-adansi-primary text-adansi-secondary font-bold py-4 rounded-xl disabled:opacity-50 active:scale-[0.98] transition-transform flex items-center justify-center gap-2"
-            >
-              {loginWithPIN.isPending ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Create Email Account'}
-            </button>
-
-            <button
-              type="button"
-              onClick={handlePINLogin}
-              className="w-full text-gray-300 text-sm py-2 hover:text-white transition-colors"
-              disabled={!email || pin.length < 4}
-            >
-              Already have an account? Login with email
-            </button>
-          </form>
+            </form>
+          </div>
         )}
       </div>
     </div>
