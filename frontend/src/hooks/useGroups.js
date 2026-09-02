@@ -145,6 +145,18 @@ export function useGroupDetail(groupId) {
     },
   })
 
+  const updateMemberRole = useMutation({
+    mutationFn: async ({ userId, role }) => {
+      const { data } = await api.post(`/groups/${groupId}/members/${userId}/role`, null, { params: { role } })
+      return data
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['group', groupId] })
+      queryClient.invalidateQueries({ queryKey: ['members', groupId] })
+      queryClient.invalidateQueries({ queryKey: ['audit', groupId] })
+    },
+  })
+
   return {
     group: groupQuery.data,
     transactions: transactionsQuery.data || [],
@@ -155,5 +167,6 @@ export function useGroupDetail(groupId) {
     members: membersQuery.data || [],
     isLoading: groupQuery.isLoading,
     inviteMember,
+    updateMemberRole,
   }
 }

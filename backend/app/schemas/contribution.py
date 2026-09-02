@@ -12,6 +12,7 @@ class ContributionCreateRequest(BaseModel):
     method: str = Field(default="momo", pattern=r"^(momo|bank|diaspora|card|agent_cash)$")
     network: str = Field(default="mtn", pattern=r"^(mtn|telecel|airteltigo|card)$")
     payer_name: Optional[str] = Field(default=None, min_length=2, max_length=100)
+    payer_phone: Optional[str] = Field(default=None, min_length=9, max_length=20)
 
 
 class ContributionResponse(BaseModel):

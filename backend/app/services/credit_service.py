@@ -72,12 +72,12 @@ class CreditScoringEngine:
                 "loan_eligible": eligible,
                 "max_loan_amount": max_loan,
                 "breakdown": {
-                    "consistency": consistency_score,
-                    "volume": volume_score,
-                    "diversity": diversity_score,
-                    "tenure": tenure_score,
-                    "standing": standing_score,
-                    "behavior": behavior_score
+                    "consistency": {"points": consistency_score, "max_points": cls.WEIGHT_CONSISTENCY},
+                    "volume": {"points": volume_score, "max_points": cls.WEIGHT_VOLUME},
+                    "diversity": {"points": diversity_score, "max_points": cls.WEIGHT_DIVERSITY},
+                    "tenure": {"points": tenure_score, "max_points": cls.WEIGHT_TENURE},
+                    "standing": {"points": standing_score, "max_points": cls.WEIGHT_STANDING},
+                    "behavior": {"points": behavior_score, "max_points": cls.WEIGHT_BEHAVIOR}
                 },
                 "calculated_at": datetime.utcnow().isoformat()
             }

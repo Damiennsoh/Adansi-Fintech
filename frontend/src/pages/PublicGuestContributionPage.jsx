@@ -12,6 +12,11 @@ export default function PublicGuestContributionPage() {
   const [loading, setLoading] = useState(true)
   const [amount, setAmount] = useState('')
   const [payerName, setPayerName] = useState('')
+  const [payerPhone, setPayerPhone] = useState('')
+  const [cardNumber, setCardNumber] = useState('')
+  const [cardExpiry, setCardExpiry] = useState('')
+  const [cardCvv, setCardCvv] = useState('')
+  const [network, setNetwork] = useState('mtn')
   const [paymentMethod, setPaymentMethod] = useState('card')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
@@ -76,8 +81,9 @@ export default function PublicGuestContributionPage() {
         group_id: group.id,
         amount: Number(amount),
         method: paymentMethod === 'card' ? 'card' : 'momo',
-        network: paymentMethod === 'card' ? 'card' : 'mtn',
+        network: paymentMethod === 'card' ? 'card' : network,
         payer_name: payerName || 'Guest Contributor',
+        payer_phone: paymentMethod === 'momo' ? payerPhone : undefined,
       }
 
       const response = await api.post('/contributions/guest', guestPayload)
@@ -163,6 +169,25 @@ export default function PublicGuestContributionPage() {
               placeholder="Your name or payer name"
             />
           </div>
+
+          {paymentMethod === 'card' ? (
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-4 space-y-3">
+              <label className="block text-sm font-semibold text-gray-800">Card details</label>
+              <input value={cardNumber} onChange={(e) => setCardNumber(e.target.value)} inputMode="numeric" maxLength="19" className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3" placeholder="Card number" required />
+              <div className="grid grid-cols-2 gap-2">
+                <input value={cardExpiry} onChange={(e) => setCardExpiry(e.target.value)} maxLength="5" className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3" placeholder="MM/YY" required />
+                <input value={cardCvv} onChange={(e) => setCardCvv(e.target.value)} inputMode="numeric" maxLength="4" className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3" placeholder="CVV" required />
+              </div>
+            </div>
+          ) : (
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-4 space-y-3">
+              <label className="block text-sm font-semibold text-gray-800">MoMo details</label>
+              <select value={network} onChange={(e) => setNetwork(e.target.value)} className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3">
+                <option value="mtn">MTN MoMo</option><option value="telecel">Telecel Cash</option><option value="airteltigo">AirtelTigo Money</option>
+              </select>
+              <input value={payerPhone} onChange={(e) => setPayerPhone(e.target.value)} inputMode="tel" className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3" placeholder="MoMo number" required />
+            </div>
+          )}
 
           <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-4">
             <label className="block text-sm font-semibold text-gray-800 mb-2">Amount</label>

@@ -67,12 +67,12 @@ export default function CreditPage() {
               <div key={factor.key}>
                 <div className="flex justify-between text-sm mb-1">
                   <span className="text-gray-700">{factor.label}</span>
-                  <span className="font-medium text-gray-900">{factor.weight}%</span>
+                  <span className="font-medium text-gray-900">{creditProfile?.breakdown?.[factor.key]?.points ?? 0}/{creditProfile?.breakdown?.[factor.key]?.max_points ?? factor.weight * 10} pts</span>
                 </div>
                 <div className="w-full bg-gray-100 rounded-full h-2">
                   <div
                     className="bg-adansi-primary rounded-full h-2 transition-all"
-                    style={{ width: `${factor.weight}%` }}
+                    style={{ width: `${Math.min(100, ((creditProfile?.breakdown?.[factor.key]?.points ?? 0) / (creditProfile?.breakdown?.[factor.key]?.max_points ?? factor.weight * 10)) * 100)}%` }}
                   />
                 </div>
                 <p className="text-xs text-gray-500 mt-0.5">{factor.desc}</p>

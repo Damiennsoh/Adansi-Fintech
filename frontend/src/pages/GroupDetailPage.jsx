@@ -8,6 +8,7 @@ import { useRealtimeContributions } from '../hooks/useRealtime'
 import { formatCurrency, formatRelativeTime, getGroupColor } from '../lib/utils'
 import api from '../lib/api'
 import USSDModal from '../components/USSDModal'
+import { useAuthStore } from '../store/authStore'
 
 function ruleLabel(rule) {
   if (rule === 'two_of_three_treasurers') return '2 of 3 Treasurers'
@@ -21,7 +22,8 @@ export default function GroupDetailPage() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const initialTab = searchParams.get('tab') || 'activity'
-  const { group, transactions, auditEvents, joinRequests, pendingWithdrawals, reviewJoinRequest, members, isLoading } = useGroupDetail(id)
+  const { user } = useAuthStore()
+  const { group, transactions, auditEvents, joinRequests, pendingWithdrawals, reviewJoinRequest, members, updateMemberRole, isLoading } = useGroupDetail(id)
   const { approveWithdrawal } = useWithdrawals()
   const [activeTab, setActiveTab] = useState(initialTab)
   const [showUSSD, setShowUSSD] = useState(false)
@@ -101,6 +103,8 @@ export default function GroupDetailPage() {
 
   const colorClass = getGroupColor(group.type)
   const balance = group.balance ?? group.current_balance ?? 0
+  const currentMember = members.find((member) => member.user_id === user?.id)
+  const canManageRoles = currentMember?.role === 'admin'
 
   return (
     <div className="min-h-screen bg-gray-50 pb-24">
@@ -127,7 +131,8 @@ export default function GroupDetailPage() {
           <span className="flex min-w-0 items-center gap-2"><Users className="h-4 w-4 shrink-0" /><span className="truncate">{members.length} members</span></span>
           <span className="truncate capitalize">Type: {group.type}</span>
           <span className="truncate">Frequency: {group.contribution_frequency || 'adhoc'}</span>
-          {group.contribution_amount ? <span className="truncate">Planned: {formatCurrency(group.contribution_amount)}</span> : null}
+    {group.target_amount ? <span className="truncate">Target: {formatCurrency(group.target_amount)}</span> : null}
+    {group.contribution_amount ? <span className="truncate">Per contribution: {formatCurrency(group.contribution_amount)}</span> : null}
         </div>
 
         <div className="mt-4 bg-white/20 rounded-xl p-3 space-y-3">
@@ -363,6 +368,19 @@ export default function GroupDetailPage() {
                 }`}>
                   {member.role || 'member'}
                 </span>
+                {canManageRoles && member.user_id !== user?.id && (
+                  <select
+                    value={member.role || 'member'}
+                    disabled={updateMemberRole.isPending}
+                    onChange={(event) => updateMemberRole.mutate({ userId: member.user_id, role: event.target.value })}
+                    className="max-w-[7rem] rounded-lg border border-gray-200 bg-white px-2 py-1 text-[11px] text-gray-700"
+                    aria-label={`Change role for ${member.name || member.full_name || 'member'}`}
+                  >
+                    <option value="member">Member</option>
+                    <option value="treasurer">Treasurer</option>
+                    <option value="admin">Admin</option>
+                  </select>
+                )}
               </div>
             ))}
           </div>

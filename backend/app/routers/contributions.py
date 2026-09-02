@@ -18,6 +18,26 @@ from app.services.group_service import group_service
 router = APIRouter(prefix="/contributions", tags=["Contributions"])
 
 
+async def settle_contribution(db: AsyncSession, contribution: Contribution, actor_id=None, provider: str = "sandbox", external_ref: str | None = None):
+    """Post one completed contribution to every financial source of truth."""
+    if await db.scalar(select(Transaction).where(Transaction.reference == contribution.transaction_ref)):
+        return
+    contribution.status = "completed"
+    contribution.momo_transaction_id = external_ref or contribution.momo_transaction_id
+    group = await db.get(Group, contribution.group_id)
+    if group:
+        await group_service.reconcile_group_balance(db, contribution.group_id)
+    member = await db.scalar(select(GroupMember).where(GroupMember.group_id == contribution.group_id, GroupMember.user_id == contribution.user_id))
+    if member:
+        member.total_contributed += contribution.amount
+        member.last_contribution_at = contribution.created_at
+    user = await db.get(User, contribution.user_id)
+    if user:
+        user.total_contributed += contribution.amount
+    db.add(Transaction(type="contribution", reference=contribution.transaction_ref, amount=contribution.amount, group_id=contribution.group_id, user_id=contribution.user_id, status="completed", external_ref=external_ref or contribution.transaction_ref))
+    db.add(AuditEvent(group_id=contribution.group_id, actor_id=actor_id, event_type="contribution_settled", entity_type="contribution", entity_id=contribution.id, amount=contribution.amount, event_metadata={"reference": contribution.transaction_ref, "method": contribution.method, "provider": provider}))
+
+
 @router.post("", status_code=status.HTTP_201_CREATED)
 async def create_contribution(
     request: ContributionCreateRequest,
@@ -75,6 +95,11 @@ async def create_contribution(
         await db.commit()
         raise HTTPException(status_code=502, detail=f"MoMo request failed: {result.get('hubtel_response')}")
 
+    if result.get("sandbox"):
+        await settle_contribution(db, contribution, current_user.id, provider="sandbox", external_ref=result.get("reference"))
+        await db.commit()
+        return {"message": "Payment completed in local sandbox", "contribution_id": str(contribution.id), "transaction_ref": transaction_ref, "amount": float(request.amount), "status": "completed", "sandbox": True}
+
     return {
         "message": "Payment request initiated",
         "contribution_id": str(contribution.id),
@@ -112,18 +137,21 @@ async def create_guest_contribution(
         raise HTTPException(status_code=404, detail="Group not found")
 
     guest_user = await ensure_guest_user(db, request.payer_name)
+    if request.method == "momo" and not request.payer_phone:
+        raise HTTPException(status_code=400, detail="A MoMo number is required")
 
     contribution = Contribution(
         group_id=request.group_id,
         user_id=guest_user.id,
         amount=request.amount,
         method=request.method,
-        status="completed" if request.method == "card" else "pending",
+        status="pending",
         meta_data={
             "network": request.network,
             "payer_name": request.payer_name or guest_user.full_name,
             "guest": True,
             "method": request.method,
+            "payer_phone": request.payer_phone,
         },
     )
     db.add(contribution)
@@ -132,33 +160,22 @@ async def create_guest_contribution(
     transaction_ref = f"ADNS-GUEST-{contribution.id.hex[:8].upper()}"
     contribution.transaction_ref = transaction_ref
 
-    if contribution.status == "completed":
-        transaction = Transaction(
-            type="contribution",
-            reference=transaction_ref,
-            amount=contribution.amount,
-            group_id=contribution.group_id,
-            user_id=contribution.user_id,
-            status="completed",
-            external_ref=transaction_ref,
+    if request.method == "card":
+        await settle_contribution(db, contribution, provider="card", external_ref=transaction_ref)
+    elif request.method == "momo":
+        provider_result = await momo_service.request_payment(
+            phone=request.payer_phone,
+            amount=request.amount,
+            description=f"ADANSI guest contribution to {group.name}",
+            network=request.network,
         )
-        db.add(transaction)
-        db.add(AuditEvent(
-            group_id=contribution.group_id,
-            actor_id=None,
-            event_type="guest_contribution",
-            entity_type="contribution",
-            entity_id=contribution.id,
-            amount=contribution.amount,
-            event_metadata={
-                "reference": transaction_ref,
-                "method": contribution.method,
-                "payer_name": contribution.meta_data.get("payer_name"),
-                "guest": True,
-            },
-        ))
-        guest_user.total_contributed = (guest_user.total_contributed or 0) + contribution.amount
-        await group_service.reconcile_group_balance(db, group.id)
+        if not provider_result["success"]:
+            contribution.status = "failed"
+            await db.commit()
+            raise HTTPException(status_code=502, detail="MoMo payment request failed")
+        contribution.transaction_ref = provider_result["reference"]
+        if provider_result.get("sandbox"):
+            await settle_contribution(db, contribution, provider="sandbox", external_ref=provider_result.get("reference"))
 
     await db.commit()
     await db.refresh(contribution)
@@ -166,7 +183,7 @@ async def create_guest_contribution(
     return {
         "message": "Contribution recorded",
         "contribution_id": str(contribution.id),
-        "transaction_ref": transaction_ref,
+        "transaction_ref": contribution.transaction_ref,
         "amount": float(request.amount),
         "status": contribution.status,
         "guest": True,
