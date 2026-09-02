@@ -157,6 +157,17 @@ class GroupListResponse(BaseModel):
     member_count: int
 
 
+class GroupSearchResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    name: str
+    code: str
+    type: str
+    current_balance: Decimal = Decimal("0")
+    member_count: int = 0
+
+
 class JoinGroupRequest(BaseModel):
     code: str = Field(..., min_length=3, max_length=10)
 
