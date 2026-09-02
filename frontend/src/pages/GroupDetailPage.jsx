@@ -45,13 +45,24 @@ export default function GroupDetailPage() {
   }
 
   const shareGroup = () => {
-    const text = `Join my ${group?.type} group "${group?.name}" on Adansi. Code: ${group?.code}. Download Adansi or dial *422*1#`
+    const publicUrl = `${window.location.origin}/g/${group?.code}?name=${encodeURIComponent(group?.name || '')}`
+    const text = `Contribute to ${group?.name} (${group?.code}) on Adansi. No account needed: ${publicUrl}`
+
     if (navigator.share) {
-      navigator.share({ title: 'Join my Adansi group', text })
-    } else {
-      navigator.clipboard.writeText(text)
-      alert('Invite text copied to clipboard!')
+      navigator.share({
+        title: `${group?.name} guest contribution link`,
+        text,
+        url: publicUrl,
+      }).catch(() => {
+        navigator.clipboard.writeText(publicUrl)
+        alert('Public guest contribution link copied to clipboard.')
+      })
+      return
     }
+
+    navigator.clipboard.writeText(publicUrl)
+      .then(() => alert('Guest contribution link copied to clipboard!'))
+      .catch(() => alert(`Share this guest page: ${publicUrl}`))
   }
 
   const handleApproveWithdrawal = async (withdrawalId, approved) => {
@@ -125,13 +136,23 @@ export default function GroupDetailPage() {
           {group.contribution_amount ? <><span className="mx-2">•</span><span>{formatCurrency(group.contribution_amount)} planned</span></> : null}
         </div>
 
-        <div className="mt-4 bg-white/20 rounded-xl p-3 flex items-center justify-between">
-          <div>
-            <p className="text-xs text-white/70">Join Code</p>
-            <p className="font-mono font-bold text-lg tracking-wider">{group.code}</p>
+        <div className="mt-4 bg-white/20 rounded-xl p-3 space-y-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs text-white/70">Join Code</p>
+              <p className="font-mono font-bold text-lg tracking-wider">{group.code}</p>
+            </div>
+            <button onClick={copyCode} className="p-2 bg-white/20 rounded-lg">
+              {copied ? <CheckCircle2 className="w-5 h-5" /> : <Copy className="w-5 h-5" />}
+            </button>
           </div>
-          <button onClick={copyCode} className="p-2 bg-white/20 rounded-lg">
-            {copied ? <CheckCircle2 className="w-5 h-5" /> : <Copy className="w-5 h-5" />}
+
+          <button
+            onClick={shareGroup}
+            className="w-full flex items-center justify-center gap-2 bg-white/15 border border-white/20 text-white font-semibold py-2.5 rounded-xl text-sm"
+          >
+            <Share2 className="w-4 h-4" />
+            Share public link
           </button>
         </div>
       </div>

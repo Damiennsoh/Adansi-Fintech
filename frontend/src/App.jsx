@@ -10,6 +10,7 @@ import LoadingScreen from './components/LoadingScreen'
 import LoginPage from './pages/LoginPage'
 import VerifyOTPPage from './pages/VerifyOTPPage'
 import SetupPINPage from './pages/SetupPINPage'
+import PublicGuestContributionPage from './pages/PublicGuestContributionPage'
 import DashboardPage from './pages/DashboardPage'
 import GroupsPage from './pages/GroupsPage'
 import GroupDetailPage from './pages/GroupDetailPage'
@@ -65,6 +66,7 @@ export default function App() {
             <Route path="/verify-otp" element={<VerifyOTPPage />} />
             <Route path="/setup-profile" element={<ProfileSetupPage />} />
             <Route path="/setup-pin" element={<SetupPINPage />} />
+            <Route path="/g/:code" element={<PublicGuestContributionPage />} />
             <Route path="/agent-verify-demo" element={<AgentVerifyMockPage />} />
 
             {/* Protected routes */}
