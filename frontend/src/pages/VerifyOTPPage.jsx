@@ -44,7 +44,8 @@ export default function VerifyOTPPage() {
 
       <div className="max-w-sm mx-auto w-full">
         <h1 className="text-2xl font-bold text-white mb-2">Verify OTP</h1>
-        <p className="text-gray-400 mb-8">Enter the 6-digit code sent to {phone}</p>
+        <p className="text-gray-400 mb-2">Enter the 6-digit code sent to</p>
+        <p className="text-white font-semibold mb-8 break-words">{phone}</p>
 
         <form onSubmit={handleVerify} className="space-y-6">
           <input
@@ -66,7 +67,10 @@ export default function VerifyOTPPage() {
               onChange={(e) => setIsNewUser(e.target.checked)}
               className="w-5 h-5 rounded border-gray-500 bg-white/10 text-adansi-primary"
             />
-            <label htmlFor="newUser" className="text-gray-300 text-sm">I am a new user</label>
+            <div>
+              <label htmlFor="newUser" className="text-gray-300 text-sm">I&apos;m creating a new account</label>
+              <p className="text-gray-500 text-xs mt-1">New users continue to profile setup after verification.</p>
+            </div>
           </div>
 
           <button

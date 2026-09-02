@@ -110,9 +110,6 @@ export default function GroupDetailPage() {
             <ArrowLeft className="w-5 h-5" />
           </button>
           <h1 className="text-xl font-bold flex-1 truncate">{group.name}</h1>
-          <button onClick={shareGroup} className="p-2 bg-white/20 rounded-full">
-            <Share2 className="w-5 h-5" />
-          </button>
         </div>
 
         <div className="text-center mb-4">
@@ -121,19 +118,16 @@ export default function GroupDetailPage() {
         </div>
 
         <div className="flex flex-col sm:flex-row sm:flex-wrap items-center justify-center gap-1 bg-black/20 text-adansi-primary text-xs px-3 py-2 rounded-xl w-full max-w-sm mx-auto mb-3 font-medium border border-adansi-primary/30 text-center">
-          <span>🛡️ {ruleLabel(group.approval_rule)}</span>
+          <span>Approval: {ruleLabel(group.approval_rule)}</span>
           <span className="hidden sm:inline">•</span>
           <span>Auto-approve: {formatCurrency(group.auto_approve_limit || 0)}</span>
         </div>
 
-        <div className="flex items-center justify-center gap-2 text-white/80 text-sm">
-          <Users className="w-4 h-4" />
-          <span>{members.length} members</span>
-          <span className="mx-2">•</span>
-          <span className="capitalize">{group.type}</span>
-          <span className="mx-2">•</span>
-          <span>Contributions: {group.contribution_frequency || 'adhoc'}</span>
-          {group.contribution_amount ? <><span className="mx-2">•</span><span>{formatCurrency(group.contribution_amount)} planned</span></> : null}
+        <div className="mx-auto grid w-full max-w-sm grid-cols-2 gap-x-4 gap-y-2 text-left text-sm text-white/80">
+          <span className="flex min-w-0 items-center gap-2"><Users className="h-4 w-4 shrink-0" /><span className="truncate">{members.length} members</span></span>
+          <span className="truncate capitalize">Type: {group.type}</span>
+          <span className="truncate">Frequency: {group.contribution_frequency || 'adhoc'}</span>
+          {group.contribution_amount ? <span className="truncate">Planned: {formatCurrency(group.contribution_amount)}</span> : null}
         </div>
 
         <div className="mt-4 bg-white/20 rounded-xl p-3 space-y-3">
@@ -152,8 +146,9 @@ export default function GroupDetailPage() {
             className="w-full flex items-center justify-center gap-2 bg-white/15 border border-white/20 text-white font-semibold py-2.5 rounded-xl text-sm"
           >
             <Share2 className="w-4 h-4" />
-            Share public link
+            Share guest contribution link
           </button>
+          <p className="text-center text-xs leading-5 text-white/70">Send this link to people who want to contribute without creating an account.</p>
         </div>
       </div>
 
