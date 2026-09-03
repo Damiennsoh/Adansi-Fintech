@@ -98,14 +98,26 @@ Ensure your `.env` files are populated before running.
 
 ## Features
 
-- **USSD-First** — Dial `*422*1#` on any phone (no smartphone required)
-- **Group Contributions** — Funeral, wedding, health, savings, investment groups
-- **Transparent Ledger** — Every member sees every transaction in real-time
-- **Social Credit Scoring** — Contributions build your creditworthiness (0–1000 scale)
-- **Agent Guardian Network** — Biometric verification at MTN MoMo agents for large withdrawals
-- **Diaspora Bridge** — Send money home from abroad (USD, GBP, EUR, CAD)
-- **Group Marketplace** — Bulk-purchase deals for coffins, catering, textbooks, insurance
-- **Embedded Micro-Insurance** — Funeral, wedding, health policies (Phase 2)
+### MVP / Current Product
+
+- **USSD-first participation** — A feature-phone-friendly contribution path (`*422*1#`).
+- **Group contributions** — Create and manage funeral, wedding, health, savings, and investment groups.
+- **Transparent group ledger** — Members can review contribution and withdrawal history.
+- **Multi-signatory withdrawals** — Require multiple group approvals before disbursement.
+- **Beneficiary disbursement workflow** — Model approved payments directly to a beneficiary.
+- **Social credit scoring** — Build a contribution-based score from recorded repayment and payment behavior.
+- **Diaspora contribution flow** — Support international contribution intent and currency conversion workflows.
+- **Sandbox payment mode** — Demonstrate contribution and withdrawal flows without moving real money while Hubtel onboarding is pending.
+
+### Roadmap / Not Yet Live
+
+- Dedicated group wallets or sub-merchant accounts.
+- Agent-assisted identity and withdrawal verification.
+- Group marketplace and negotiated bulk purchases.
+- Embedded micro-insurance products.
+- Automated recurring collections and production notifications.
+
+Adansi is not a bank and does not currently provide deposit-taking, interest-bearing savings, insurance, or live payment services without the required regulated partners and credentials. See the full product definition and roadmap in [FEATURE_DOCUMENTATION.md](./FEATURE_DOCUMENTATION.md).
 
 ---
 
