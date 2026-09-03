@@ -45,13 +45,13 @@ export default function LoginPage() {
     if (!email || !fullName || pin.length < 4) return
 
     try {
-      await api.post('/auth/register', {
-        email,
-        full_name: fullName,
+      const response = await api.post('/auth/register', {
+        email: email.trim().toLowerCase(),
+        full_name: fullName.trim(),
         pin,
       })
-      await loginWithPIN.mutateAsync({ email, pin })
-      navigate('/dashboard')
+      alert(response.data?.message || 'Account created. Check your email to verify your account, then sign in.')
+      setPin('')
     } catch (err) {
       alert(err.response?.data?.detail || 'We could not create your account. Please try again.')
     }
