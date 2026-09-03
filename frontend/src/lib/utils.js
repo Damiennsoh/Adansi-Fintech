@@ -40,6 +40,12 @@ export function generateGroupCode() {
   return code;
 }
 
+export function formatGroupType(type) {
+  return String(type || 'group')
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
 export function getGroupColor(type) {
   const colors = {
     funeral: 'bg-adansi-funeral',

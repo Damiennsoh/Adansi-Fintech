@@ -34,9 +34,15 @@ class GroupCreateRequest(BaseModel):
     @field_validator("type")
     @classmethod
     def validate_type(cls, v):
-        if v not in VALID_GROUP_TYPES:
-            raise ValueError(f"type must be one of: {', '.join(sorted(VALID_GROUP_TYPES))}")
-        return v
+        normalized = v.strip().lower()
+        if normalized in VALID_GROUP_TYPES:
+            return normalized
+        # Custom group types are stored as a short, normalized slug.
+        if len(normalized) < 3 or len(normalized) > 30:
+            raise ValueError("custom group type must be between 3 and 30 characters")
+        if not all(char.isalnum() or char == "_" for char in normalized):
+            raise ValueError("custom group type may contain only letters, numbers, and underscores")
+        return normalized
 
     @field_validator("approval_rule")
     @classmethod

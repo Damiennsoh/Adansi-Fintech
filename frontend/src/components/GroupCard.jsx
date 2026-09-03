@@ -1,6 +1,6 @@
 import { Users, ArrowUpRight } from 'lucide-react'
 import { Link } from 'react-router-dom'
-import { formatCurrency, getGroupColor } from '../lib/utils'
+import { formatCurrency, formatGroupType, getGroupColor } from '../lib/utils'
 
 export default function GroupCard({ group }) {
   return (
@@ -22,7 +22,7 @@ export default function GroupCard({ group }) {
                 </span>
               )}
             </div>
-            <span className="text-xs text-gray-500 capitalize">{group.type} Group</span>
+            <span className="text-xs text-gray-500">{formatGroupType(group.type)} Group</span>
           </div>
         </div>
         <ArrowUpRight className="w-5 h-5 text-gray-400 flex-shrink-0" />

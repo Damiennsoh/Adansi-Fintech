@@ -5,7 +5,7 @@ import { ArrowLeft, Users, Copy, Share2, Phone, Wallet, ArrowUpRight, ArrowDownL
 import { useGroupDetail } from '../hooks/useGroups'
 import { useWithdrawals } from '../hooks/useContributions'
 import { useRealtimeContributions } from '../hooks/useRealtime'
-import { formatCurrency, formatRelativeTime, getGroupColor } from '../lib/utils'
+import { formatCurrency, formatGroupType, formatRelativeTime, getGroupColor } from '../lib/utils'
 import api from '../lib/api'
 import USSDModal from '../components/USSDModal'
 import { useAuthStore } from '../store/authStore'
@@ -129,7 +129,7 @@ export default function GroupDetailPage() {
 
         <div className="mx-auto grid w-full max-w-sm grid-cols-2 gap-x-4 gap-y-2 text-left text-sm text-white/80">
           <span className="flex min-w-0 items-center gap-2"><Users className="h-4 w-4 shrink-0" /><span className="truncate">{members.length} members</span></span>
-          <span className="truncate capitalize">Type: {group.type}</span>
+          <span className="truncate">Type: {formatGroupType(group.type)}</span>
           <span className="truncate">Frequency: {group.contribution_frequency || 'adhoc'}</span>
     {group.target_amount ? <span className="truncate">Target: {formatCurrency(group.target_amount)}</span> : null}
     {group.contribution_amount ? <span className="truncate">Per contribution: {formatCurrency(group.contribution_amount)}</span> : null}
