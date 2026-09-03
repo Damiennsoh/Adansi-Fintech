@@ -25,22 +25,28 @@ async def register_user(request: UserRegisterRequest, db: AsyncSession = Depends
         existing = await db.execute(select(User).where(User.phone == request.phone))
         if existing.scalar_one_or_none():
             raise HTTPException(status_code=400, detail="Phone number already registered")
-    if request.email:
+    normalized_email = request.email.lower().strip() if request.email else None
+    if normalized_email:
         try:
-            existing = await db.execute(select(User).where(User.email == request.email.lower().strip()))
+            existing = await db.execute(select(User).where(User.email == normalized_email))
             if existing.scalar_one_or_none():
                 raise HTTPException(status_code=400, detail="Email already registered")
+        except HTTPException:
+            raise
         except Exception:
             # Compatibility with older DB schemas that do not yet have the email column.
             pass
 
-    phone_for_auth = request.phone or f"+000{abs(hash(request.email or request.full_name)) % 1000000000:09d}"
-
-    # Create Supabase Auth user (phone + PIN as password)
-    supabase_result = await supabase_auth.sign_up_with_phone(
-        phone=phone_for_auth,
-        password=request.pin
-    )
+    if request.phone:
+        supabase_result = await supabase_auth.sign_up_with_phone(
+            phone=request.phone,
+            password=request.pin
+        )
+    else:
+        supabase_result = await supabase_auth.sign_up_with_email(
+            email=normalized_email,
+            password=request.pin
+        )
 
     if not supabase_result["success"]:
         raise HTTPException(status_code=400, detail=supabase_result.get("error", "Registration failed"))
@@ -163,12 +169,17 @@ async def login_user(request: UserLoginRequest, db: AsyncSession = Depends(get_d
     # Reset failed attempts
     redis_service.set_pin_attempts(request.phone or identifier, 0)
 
-    # Try to sign in with Supabase to get fresh tokens when a Ghana phone is available.
-    login_phone = request.phone or (user.phone or f"+000{abs(hash(user.email or user.full_name)) % 1000000000:09d}")
-    supabase_result = await supabase_auth.sign_in_with_phone(
-        phone=login_phone,
-        password=request.pin
-    )
+    # Use the matching Supabase identity: email sign-in must not be routed through phone auth.
+    if request.email:
+        supabase_result = await supabase_auth.sign_in_with_email(
+            email=identifier.lower().strip(),
+            password=request.pin
+        )
+    else:
+        supabase_result = await supabase_auth.sign_in_with_phone(
+            phone=request.phone,
+            password=request.pin
+        )
 
     # If Supabase auth fails, fall back to local JWT tokens (for testing)
     if not supabase_result["success"]:
