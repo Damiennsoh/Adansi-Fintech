@@ -52,17 +52,30 @@ async def register_user(request: UserRegisterRequest, db: AsyncSession = Depends
         raise HTTPException(status_code=400, detail=supabase_result.get("error", "Registration failed"))
 
     # Create local user record
+    auth_user = supabase_result.get("user")
+    auth_user_id = getattr(auth_user, "id", None) if auth_user else None
     new_user = User(
+        auth_user_id=auth_user_id,
         phone=request.phone,
-        email=request.email.lower().strip() if request.email else None,
+        email=normalized_email,
         full_name=request.full_name,
         ghana_card_number=request.ghana_card_number,
         pin_hash=auth_service.hash_pin(request.pin),
-        is_verified=False
+        is_verified=bool(getattr(supabase_result.get("session"), "access_token", None))
     )
     db.add(new_user)
-    await db.commit()
-    await db.refresh(new_user)
+    try:
+        await db.commit()
+        await db.refresh(new_user)
+    except Exception as exc:
+        await db.rollback()
+        # Do not leave an Auth account without its local profile.
+        if auth_user_id:
+            try:
+                supabase_auth.delete_user(auth_user_id)
+            except Exception:
+                pass
+        raise HTTPException(status_code=400, detail="Database error saving new user") from exc
 
     return {
         "message": "User registered successfully. Please verify your phone or continue with email-based onboarding.",

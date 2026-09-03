@@ -1,6 +1,6 @@
 """Credit scoring engine: rule-based MVP."""
 from decimal import Decimal
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 from uuid import UUID
 
@@ -80,7 +80,7 @@ class CreditScoringEngine:
                     "standing": {"points": standing_score, "max_points": cls.WEIGHT_STANDING},
                     "behavior": {"points": behavior_score, "max_points": cls.WEIGHT_BEHAVIOR}
                 },
-                "calculated_at": datetime.utcnow().isoformat()
+                "calculated_at": datetime.now(timezone.utc).isoformat()
             }
 
             # Cache result
@@ -112,7 +112,7 @@ class CreditScoringEngine:
                 continue
 
             # Calculate expected contributions based on frequency and tenure
-            days_since_join = (datetime.utcnow() - member.joined_at).days
+            days_since_join = (datetime.now(timezone.utc) - member.joined_at).days
 
             if group.contribution_frequency == "daily":
                 expected = days_since_join
@@ -177,7 +177,7 @@ class CreditScoringEngine:
     @classmethod
     def _calculate_tenure(cls, user: User) -> int:
         """Tenure = months since first contribution on platform."""
-        days = (datetime.utcnow() - user.created_at).days
+        days = (datetime.now(timezone.utc) - user.created_at).days
         months = days / 30
 
         # Max 12 months = full points
@@ -243,7 +243,7 @@ class CreditScoringEngine:
         profile.score = score
         profile.loan_eligible = data["loan_eligible"]
         profile.max_loan_amount = Decimal(str(data["max_loan_amount"]))
-        profile.last_calculated_at = datetime.utcnow()
+        profile.last_calculated_at = datetime.now(timezone.utc)
 
         await session.commit()
 

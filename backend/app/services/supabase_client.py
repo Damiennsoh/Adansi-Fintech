@@ -79,6 +79,11 @@ class SupabaseAuthService:
             return {"success": False, "error": str(e)}
 
     @staticmethod
+    def delete_user(user_id: str) -> None:
+        """Remove an Auth user when local profile creation cannot be completed."""
+        supabase_admin.auth.admin.delete_user(user_id)
+
+    @staticmethod
     async def get_user_by_token(jwt_token: str) -> dict:
         """Verify JWT and return user payload."""
         try:
