@@ -39,6 +39,24 @@ class SupabaseAuthService:
             return {"success": False, "error": str(e)}
 
     @staticmethod
+    async def sign_up_with_email(email: str, password: str) -> dict:
+        """Register a diaspora user with email + PIN password."""
+        try:
+            response = supabase.auth.sign_up({"email": email, "password": password})
+            return {"success": True, "user": response.user, "session": response.session}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    @staticmethod
+    async def sign_in_with_email(email: str, password: str) -> dict:
+        """Login with email + PIN password."""
+        try:
+            response = supabase.auth.sign_in_with_password({"email": email, "password": password})
+            return {"success": True, "access_token": response.session.access_token, "refresh_token": response.session.refresh_token}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    @staticmethod
     async def send_otp(phone: str) -> dict:
         """Send OTP to phone number."""
         try:
