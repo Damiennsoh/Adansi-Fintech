@@ -13,6 +13,7 @@ class ContributionCreateRequest(BaseModel):
     network: str = Field(default="mtn", pattern=r"^(mtn|telecel|airteltigo|card)$")
     payer_name: Optional[str] = Field(default=None, min_length=2, max_length=100)
     payer_phone: Optional[str] = Field(default=None, min_length=9, max_length=20)
+    payer_email: Optional[str] = Field(default=None, min_length=5, max_length=254, description="Email for diaspora card contributions (Paystack receipt)")
 
 
 class ContributionResponse(BaseModel):
