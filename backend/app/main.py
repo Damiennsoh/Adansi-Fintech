@@ -211,3 +211,98 @@ async def health_db_schema():
         "schema_ok": not missing,
     }
 
+
+@app.get("/health/build-info")
+async def health_build_info():
+    """Diagnostic: identify which code version is currently deployed on Render.
+
+    If `build.commit` shows a SHA other than your latest push, Render has not
+    picked up the new deploy (check auto-deploy branch on the dashboard).
+    """
+    import os
+    info = {
+        "known_commits_expected_tail": [
+            "e3cf58f (ddl-patch-import-fix)",
+            "c53b3b9 (ddl-patcher + db-schema)",
+            "a4709e2 (alembic + surface SQL errors)",
+        ],
+        "cwd": os.getcwd(),
+        "app_main_file": __file__,
+    }
+    try:
+        from app.database import engine
+        from sqlalchemy import text
+        async with engine.connect() as conn:
+            pgver = await conn.execute(text("SELECT version()"))
+            info["postgres_version"] = pgver.scalar()[:80] if pgver else None
+    except Exception as exc:
+        info["postgres_version"] = f"error: {exc}"
+    return info
+
+
+@app.post("/debug/register-dry-run")
+async def debug_register_dry_run(payload: dict):
+    """Perform the EXACT users-table INSERT that `register_user` does, but inside a
+    SAVEPOINT that is always rolled back. Returns the raw, complete SQL error (if any)
+    without requiring any auth.py code changes.
+
+    Usage: POST JSON with {full_name, email?, phone?, pin?, ghana_card_number?}
+    """
+    from app.database import AsyncSessionLocal
+    from sqlalchemy import text
+    import traceback
+
+    full_name = str(payload.get("full_name", "")).strip()
+    email = str(payload.get("email", "")).strip()
+    email = email.lower() if email else None
+    phone = str(payload.get("phone", "")).strip() or None
+    pin = str(payload.get("pin", "123456")).strip()
+    ghana_card = (
+        str(payload.get("ghana_card_number", "")).strip().upper() or None
+    )
+
+    result = {
+        "input": {
+            "full_name": full_name, "email": email,
+            "phone": phone, "ghana_card_number": ghana_card,
+            "pin_length": len(pin),
+        },
+        "steps": [],
+    }
+
+    async with AsyncSessionLocal() as s:
+        async with s.begin_nested():
+            try:
+                from app.models import User
+                from app.services.auth_service import auth_service
+                u = User(
+                    auth_user_id=None,
+                    phone=phone,
+                    email=email,
+                    full_name=full_name,
+                    ghana_card_number=ghana_card,
+                    pin_hash=auth_service.hash_pin(pin),
+                    is_verified=False,
+                )
+                s.add(u)
+                result["steps"].append("User() constructed")
+                await s.flush()
+                result["steps"].append(f"flush ok, id={u.id}")
+                # Inspect by raw SQL the inserted row
+                rows = await s.execute(text("SELECT id, phone, email, full_name, ghana_card_number FROM users WHERE id = :uid"), {"uid": str(u.id)})
+                result["inserted_row"] = [dict(r._mapping) for r in rows.all()]
+                raise RuntimeError("__dry_run_rollback__")
+            except RuntimeError as rte:
+                if str(rte) == "__dry_run_rollback__":
+                    result["success"] = True
+                    result["verdict"] = "Dry-run INSERT succeeded. No DB error — real signup failure is elsewhere (Supabase Auth / HTTP validation / pre-insert code)."
+                else:
+                    raise
+            except Exception as exc:
+                result["success"] = False
+                result["verdict"] = "INSERT FAILED inside SAVEPOINT — this is the real DB error."
+                result["error_type"] = type(exc).__name__
+                result["error_str"] = str(exc)
+                result["error_tb"] = traceback.format_exc(limit=12)
+        return result
+
