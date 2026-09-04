@@ -40,6 +40,12 @@ export function generateGroupCode() {
   return code;
 }
 
+export function formatGroupType(type) {
+  return String(type || 'group')
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
 export function getGroupColor(type) {
   const colors = {
     funeral: 'bg-adansi-funeral',
@@ -55,8 +61,7 @@ export function getGroupColor(type) {
 }
 
 export function getCreditTier(score) {
-  if (score >= 750) return { tier: 'Platinum', color: 'text-purple-600', bg: 'bg-purple-100' };
-  if (score >= 650) return { tier: 'Gold', color: 'text-yellow-600', bg: 'bg-yellow-100' };
+  if (score >= 700) return { tier: 'Gold', color: 'text-yellow-600', bg: 'bg-yellow-100' };
   if (score >= 550) return { tier: 'Silver', color: 'text-gray-600', bg: 'bg-gray-200' };
   return { tier: 'Bronze', color: 'text-orange-600', bg: 'bg-orange-100' };
 }

@@ -5,7 +5,7 @@ export default function CreditScoreRing({ score = 0 }) {
   const [animatedScore, setAnimatedScore] = useState(0)
   const tier = getCreditTier(score)
   const circumference = 2 * Math.PI * 80
-  const progress = (animatedScore / 850) * circumference
+  const progress = (Math.min(850, Math.max(0, animatedScore)) / 850) * circumference
 
   useEffect(() => {
     const timer = setTimeout(() => setAnimatedScore(score), 300)

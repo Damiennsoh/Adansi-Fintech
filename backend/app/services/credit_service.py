@@ -1,6 +1,6 @@
 """Credit scoring engine: rule-based MVP."""
 from decimal import Decimal
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 from uuid import UUID
 
@@ -15,13 +15,14 @@ from app.services.redis_service import redis_service
 class CreditScoringEngine:
     """Rule-based credit scoring for ADANSI users."""
 
-    # Score weights (must sum to 1000)
-    WEIGHT_CONSISTENCY = 350
-    WEIGHT_VOLUME = 250
-    WEIGHT_DIVERSITY = 150
+    # Score weights (must sum to 850)
+    WEIGHT_CONSISTENCY = 300
+    WEIGHT_VOLUME = 200
+    WEIGHT_DIVERSITY = 100
     WEIGHT_TENURE = 100
     WEIGHT_STANDING = 100
     WEIGHT_BEHAVIOR = 50
+    MAX_SCORE = 850
 
     @classmethod
     async def calculate_score(cls, user_id: UUID) -> dict:
@@ -36,13 +37,13 @@ class CreditScoringEngine:
             if not user:
                 return {"score": 0, "eligible": False}
 
-            # 1. Payment Consistency (35% = 350 points)
+            # 1. Payment Consistency (35% = 300 points)
             consistency_score = await cls._calculate_consistency(session, user_id)
 
-            # 2. Contribution Volume (25% = 250 points)
+            # 2. Contribution Volume (24% = 200 points)
             volume_score = await cls._calculate_volume(session, user_id)
 
-            # 3. Group Diversity (15% = 150 points)
+            # 3. Group Diversity (12% = 100 points)
             diversity_score = await cls._calculate_diversity(session, user_id)
 
             # 4. Tenure (10% = 100 points)
@@ -59,8 +60,8 @@ class CreditScoringEngine:
                 tenure_score + standing_score + behavior_score
             )
 
-            # Clamp to 0-1000
-            total_score = max(0, min(1000, total_score))
+            # Clamp to the published 0-850 scale
+            total_score = max(0, min(cls.MAX_SCORE, total_score))
 
             # Determine eligibility and max loan
             eligible, max_loan, tier = cls._get_loan_terms(total_score)
@@ -79,7 +80,7 @@ class CreditScoringEngine:
                     "standing": {"points": standing_score, "max_points": cls.WEIGHT_STANDING},
                     "behavior": {"points": behavior_score, "max_points": cls.WEIGHT_BEHAVIOR}
                 },
-                "calculated_at": datetime.utcnow().isoformat()
+                "calculated_at": datetime.now(timezone.utc).isoformat()
             }
 
             # Cache result
@@ -111,7 +112,7 @@ class CreditScoringEngine:
                 continue
 
             # Calculate expected contributions based on frequency and tenure
-            days_since_join = (datetime.utcnow() - member.joined_at).days
+            days_since_join = (datetime.now(timezone.utc) - member.joined_at).days
 
             if group.contribution_frequency == "daily":
                 expected = days_since_join
@@ -176,7 +177,7 @@ class CreditScoringEngine:
     @classmethod
     def _calculate_tenure(cls, user: User) -> int:
         """Tenure = months since first contribution on platform."""
-        days = (datetime.utcnow() - user.created_at).days
+        days = (datetime.now(timezone.utc) - user.created_at).days
         months = days / 30
 
         # Max 12 months = full points
@@ -221,16 +222,11 @@ class CreditScoringEngine:
     @classmethod
     def _get_loan_terms(cls, score: int) -> tuple:
         """Map score to loan eligibility, max amount, and tier."""
-        if score < 300:
-            return False, 0, "no_credit"
-        elif score < 500:
-            return True, 100, "bronze"
-        elif score < 650:
-            return True, 300, "silver"
-        elif score < 800:
-            return True, 600, "gold"
-        else:
-            return True, 1000, "platinum"
+        if score >= 700:
+            return True, 2000, "gold"
+        if score >= 550:
+            return True, 1000, "silver"
+        return False, 0, "bronze"
 
     @classmethod
     async def _update_credit_profile(cls, session: AsyncSession, user_id: UUID, score: int, data: dict) -> None:
@@ -247,7 +243,7 @@ class CreditScoringEngine:
         profile.score = score
         profile.loan_eligible = data["loan_eligible"]
         profile.max_loan_amount = Decimal(str(data["max_loan_amount"]))
-        profile.last_calculated_at = datetime.utcnow()
+        profile.last_calculated_at = datetime.now(timezone.utc)
 
         await session.commit()
 

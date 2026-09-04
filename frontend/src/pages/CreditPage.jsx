@@ -6,9 +6,9 @@ import CreditScoreRing from '../components/CreditScoreRing'
 import { formatCurrency, getCreditTier } from '../lib/utils'
 
 const scoreFactors = [
-  { key: 'consistency', label: 'Consistency', weight: 35, desc: 'Regular contributions over time' },
-  { key: 'volume', label: 'Volume', weight: 25, desc: 'Total amount contributed' },
-  { key: 'diversity', label: 'Diversity', weight: 15, desc: 'Number of different groups' },
+  { key: 'consistency', label: 'Consistency', maxPoints: 300, desc: 'Regular, on-time contributions' },
+  { key: 'volume', label: 'Volume', maxPoints: 200, desc: 'Total amount contributed' },
+  { key: 'diversity', label: 'Diversity', maxPoints: 100, desc: 'Participation across group types' },
   { key: 'tenure', label: 'Tenure', weight: 10, desc: 'How long you have been active' },
   { key: 'standing', label: 'Standing', weight: 10, desc: 'Group role & reliability' },
   { key: 'behavior', label: 'Behavior', weight: 5, desc: 'Repayment & approval history' },
@@ -61,18 +61,19 @@ export default function CreditPage() {
       <div className="px-5 py-6 space-y-6">
         {/* Score Breakdown */}
         <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
-          <h2 className="font-bold text-gray-900 mb-4">Score Breakdown</h2>
+          <h2 className="font-bold text-gray-900 mb-1">Score Breakdown</h2>
+          <p className="text-xs text-gray-500 mb-4">Your score is measured on an 850-point scale.</p>
           <div className="space-y-4">
             {scoreFactors.map(factor => (
               <div key={factor.key}>
                 <div className="flex justify-between text-sm mb-1">
                   <span className="text-gray-700">{factor.label}</span>
-                  <span className="font-medium text-gray-900">{creditProfile?.breakdown?.[factor.key]?.points ?? 0}/{creditProfile?.breakdown?.[factor.key]?.max_points ?? factor.weight * 10} pts</span>
+                  <span className="font-medium text-gray-900">{creditProfile?.breakdown?.[factor.key]?.points ?? 0}/{creditProfile?.breakdown?.[factor.key]?.max_points ?? factor.maxPoints} pts</span>
                 </div>
                 <div className="w-full bg-gray-100 rounded-full h-2">
                   <div
                     className="bg-adansi-primary rounded-full h-2 transition-all"
-                    style={{ width: `${Math.min(100, ((creditProfile?.breakdown?.[factor.key]?.points ?? 0) / (creditProfile?.breakdown?.[factor.key]?.max_points ?? factor.weight * 10)) * 100)}%` }}
+                    style={{ width: `${Math.min(100, ((creditProfile?.breakdown?.[factor.key]?.points ?? 0) / (creditProfile?.breakdown?.[factor.key]?.max_points ?? factor.maxPoints)) * 100)}%` }}
                   />
                 </div>
                 <p className="text-xs text-gray-500 mt-0.5">{factor.desc}</p>
@@ -116,7 +117,7 @@ export default function CreditPage() {
           </div>
         </div>
 
-        {/* Partner Lenders (Mock for Demo) */}
+        {/* Partner Lenders (Coming Soon) */}
         <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
           <h2 className="font-bold text-gray-900 mb-1">Partner Lenders</h2>
           <p className="text-xs text-gray-500 mb-4">Your social credit score unlocks loans from verified lenders</p>

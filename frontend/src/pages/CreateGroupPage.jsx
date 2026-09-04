@@ -10,6 +10,7 @@ const groupTypes = [
   { key: 'health', label: 'Health', desc: 'Medical bills & health support', color: 'bg-green-500' },
   { key: 'savings', label: 'Savings', desc: 'Rotating savings (Susu)', color: 'bg-blue-500' },
   { key: 'investment', label: 'Investment', desc: 'Group investment pool', color: 'bg-orange-500' },
+  { key: 'custom', label: 'Custom group', desc: 'Create a type that fits your group', color: 'bg-slate-600' },
 ]
 
 export default function CreateGroupPage() {
@@ -18,6 +19,7 @@ export default function CreateGroupPage() {
   const [form, setForm] = useState({
     name: '',
     type: 'savings',
+    custom_type: '',
     target_amount: '',
     contribution_amount: '',
     frequency: 'monthly',
@@ -33,9 +35,14 @@ export default function CreateGroupPage() {
   const handleSubmit = async (e) => {
     e.preventDefault()
     try {
+      const customType = form.custom_type.trim().replace(/\s+/g, ' ')
+      if (form.type === 'custom' && (customType.length < 3 || customType.length > 30)) {
+        alert('Enter a custom group type between 3 and 30 characters.')
+        return
+      }
       const payload = {
         name: form.name,
-        type: form.type,
+        type: form.type === 'custom' ? customType.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') : form.type,
         description: form.description,
         purpose: form.description,
         target_amount: parseFloat(form.target_amount) || null,
@@ -154,6 +161,22 @@ export default function CreateGroupPage() {
               </button>
             ))}
           </div>
+          {form.type === 'custom' && (
+            <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+              <label htmlFor="custom-group-type" className="block text-sm font-semibold text-gray-800 mb-1">Your group type</label>
+              <input
+                id="custom-group-type"
+                type="text"
+                value={form.custom_type}
+                onChange={(e) => setForm({ ...form, custom_type: e.target.value })}
+                placeholder="e.g., School Fees Fund"
+                maxLength={30}
+                className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl focus:outline-none focus:border-adansi-primary focus:ring-2 focus:ring-adansi-primary/20"
+                required
+              />
+              <p className="text-xs text-gray-500 mt-1">Use 3–30 characters. This label will appear on your group.</p>
+            </div>
+          )}
         </div>
 
         <div>

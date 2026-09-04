@@ -25,15 +25,17 @@ async def register_user(request: UserRegisterRequest, db: AsyncSession = Depends
         existing = await db.execute(select(User).where(User.phone == request.phone))
         if existing.scalar_one_or_none():
             raise HTTPException(status_code=400, detail="Phone number already registered")
-    if request.email:
+    normalized_email = request.email.lower().strip() if request.email else None
+    if normalized_email:
         try:
-            existing = await db.execute(select(User).where(User.email == request.email.lower().strip()))
+            existing = await db.execute(select(User).where(User.email == normalized_email))
             if existing.scalar_one_or_none():
                 raise HTTPException(status_code=400, detail="Email already registered")
+        except HTTPException:
+            raise
         except Exception:
             pass
 
-    normalized_email = request.email.lower().strip() if request.email else None
     phone_for_auth = request.phone or f"+000{abs(hash(request.email or request.full_name)) % 1000000000:09d}"
 
     if normalized_email:
@@ -62,17 +64,27 @@ async def register_user(request: UserRegisterRequest, db: AsyncSession = Depends
             raise HTTPException(status_code=400, detail=supabase_result.get("error", "Registration failed"))
 
     new_user = User(
+        auth_user_id=auth_user_id,
         phone=request.phone,
         email=normalized_email,
-        auth_user_id=auth_user_id,
         full_name=request.full_name,
         ghana_card_number=request.ghana_card_number,
         pin_hash=auth_service.hash_pin(request.pin),
         is_verified=bool(supabase_result.get("success"))
     )
     db.add(new_user)
-    await db.commit()
-    await db.refresh(new_user)
+    try:
+        await db.commit()
+        await db.refresh(new_user)
+    except Exception as exc:
+        await db.rollback()
+        # Do not leave an Auth account without its local profile.
+        if auth_user_id:
+            try:
+                supabase_auth.delete_user(auth_user_id)
+            except Exception:
+                pass
+        raise HTTPException(status_code=400, detail="Database error saving new user") from exc
 
     return {
         "message": "User registered successfully. Please verify your phone or continue with email-based onboarding.",
