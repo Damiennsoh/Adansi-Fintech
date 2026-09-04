@@ -27,11 +27,38 @@ class SupabaseAuthService:
             return {"success": False, "error": str(e)}
 
     @staticmethod
+    async def sign_up_with_email(email: str, password: str) -> dict:
+        """Register a diaspora user with email + PIN. Supabase will send a confirmation email."""
+        try:
+            cleaned_email = email.lower().strip()
+            response = supabase.auth.sign_up({
+                "email": cleaned_email,
+                "password": password,
+                "options": {"email_confirm": False},
+            })
+            return {"success": True, "user": response.user, "session": response.session}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    @staticmethod
     async def sign_in_with_phone(phone: str, password: str) -> dict:
         """Login with phone + password."""
         try:
             response = supabase.auth.sign_in_with_password({
                 "phone": phone,
+                "password": password
+            })
+            return {"success": True, "access_token": response.session.access_token, "refresh_token": response.session.refresh_token}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    @staticmethod
+    async def sign_in_with_email(email: str, password: str) -> dict:
+        """Login diaspora user with email + PIN."""
+        try:
+            cleaned_email = email.lower().strip()
+            response = supabase.auth.sign_in_with_password({
+                "email": cleaned_email,
                 "password": password
             })
             return {"success": True, "access_token": response.session.access_token, "refresh_token": response.session.refresh_token}

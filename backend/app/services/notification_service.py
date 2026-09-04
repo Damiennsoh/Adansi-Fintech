@@ -123,4 +123,15 @@ class NotificationService:
         return await cls.send_whatsapp(phone, message)
 
 
+    @classmethod
+    @property
+    def is_configured(cls) -> bool:
+        return bool(
+            settings.twilio_account_sid and
+            settings.twilio_auth_token and
+            settings.twilio_whatsapp_number
+        )
+
+
 notification_service = NotificationService()
+

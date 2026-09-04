@@ -1,31 +1,63 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import api from '../lib/api'
 import { useNavigate } from 'react-router-dom'
 import { 
   Globe, ArrowLeft, Search, CreditCard, TrendingUp, 
-  CheckCircle2, Loader2, AlertCircle, Clock
+  CheckCircle2, Loader2, AlertCircle, Clock, ExternalLink
 } from 'lucide-react'
 import { formatCurrency } from '../lib/utils'
 
 const currencies = {
-  USD: { flag: 'US' },
-  GBP: { flag: 'GB' },
-  EUR: { flag: 'EU' },
-  CAD: { flag: 'CA' },
+  USD: { flag: '🇺🇸' },
+  GBP: { flag: '🇬🇧' },
+  EUR: { flag: '🇪🇺' },
+  CAD: { flag: '🇨🇦' },
 }
 
+const PAYSTACK_SDK_URL = 'https://js.paystack.co/v1/inline.js'
+
+function loadPaystackSDK() {
+  if (typeof window === 'undefined') return Promise.resolve(false)
+  if (window.PaystackPop) return Promise.resolve(true)
+  return new Promise((resolve) => {
+    const existing = document.querySelector(`script[src="${PAYSTACK_SDK_URL}"]`)
+    if (existing) {
+      existing.addEventListener('load', () => resolve(true), { once: true })
+      return
+    }
+    const s = document.createElement('script')
+    s.src = PAYSTACK_SDK_URL
+    s.async = true
+    s.onload = () => resolve(true)
+    s.onerror = () => resolve(false)
+    document.head.appendChild(s)
+  })
+}
+
+const getProviderInfoCached = () => {
+  return api.get('/contributions/provider/info').catch(() => ({ data: {} }))
+}
 
 export default function DiasporaPage() {
   const navigate = useNavigate()
-  const [step, setStep] = useState('select') // select | amount | payment | success
+  const [step, setStep] = useState('select') // select | amount | payment | verifying | success | error
   const [selectedGroup, setSelectedGroup] = useState(null)
   const [amountGHS, setAmountGHS] = useState('')
   const [currency, setCurrency] = useState('USD')
   const [payerName, setPayerName] = useState('')
+  const [payerEmail, setPayerEmail] = useState('')
   const [searchCode, setSearchCode] = useState('')
   const [foundGroup, setFoundGroup] = useState(null)
   const [hasSearched, setHasSearched] = useState(false)
+  const [pendingContribution, setPendingContribution] = useState(null)
+  const [lastError, setLastError] = useState(null)
+  const [providerInfo, setProviderInfo] = useState(null)
+
+  useEffect(() => {
+    getProviderInfoCached().then(r => setProviderInfo(r?.data || {}))
+  }, [])
+
   const ratesQuery = useQuery({
     queryKey: ['exchange-rates'],
     queryFn: async () => {
@@ -43,6 +75,11 @@ export default function DiasporaPage() {
   const foreignAmount = amountGHS && rate > 0 ? (parseFloat(amountGHS) / rate).toFixed(2) : '0.00'
   const fee = amountGHS ? (parseFloat(amountGHS) * 0.01).toFixed(2) : '0.00'
   const total = amountGHS ? (parseFloat(amountGHS) + parseFloat(fee)).toFixed(2) : '0.00'
+
+  const publicKey =
+    providerInfo?.paystack_public_key ||
+    import.meta.env.VITE_PAYSTACK_PUBLIC_KEY ||
+    'pk_test_a1edd4233cb500a8b10d38357b594ced33e9c557'
 
   const handleSearch = async () => {
     const query = searchCode.trim()
@@ -75,8 +112,102 @@ export default function DiasporaPage() {
     }
   }
 
-  const handleContribute = () => {
-    window.alert('Hubtel card checkout is not configured for this environment yet. No contribution was recorded.')
+  const handleContribute = async () => {
+    if (!selectedRate || rate <= 0 || !amountGHS || parseFloat(amountGHS) <= 0 || !payerName.trim()) return
+    setLastError(null)
+    setStep('payment')
+    try {
+      const { data } = await api.post('/contributions/guest', {
+        group_id: selectedGroup.id,
+        amount: parseFloat(total),
+        method: 'card',
+        network: 'mtn',
+        payer_name: payerName.trim(),
+        payer_email: payerEmail.trim() || `guest-${Date.now()}@adansi.app`,
+      })
+      setPendingContribution(data)
+      await runPaystackCheckout(data)
+    } catch (err) {
+      setLastError(err.response?.data?.detail || err.message || 'Failed to initialize payment')
+      setStep('error')
+    }
+  }
+
+  const runPaystackCheckout = async (init) => {
+    const loaded = await loadPaystackSDK()
+    const amountKobo = Math.round(parseFloat(total) * 100)
+    const ref = init.transaction_ref || `ADNS-${Date.now()}`
+    const email = payerEmail.trim() || init?.payer_email || `guest-${Date.now()}@adansi.app`
+
+    if (loaded && window.PaystackPop && publicKey && !publicKey.startsWith('your-')) {
+      const handler = window.PaystackPop.setup({
+        key: publicKey,
+        email,
+        amount: amountKobo,
+        currency: 'GHS',
+        ref,
+        metadata: {
+          custom_fields: [
+            { display_name: 'Group', variable_name: 'group', value: selectedGroup?.name || '' },
+            { display_name: 'Payer', variable_name: 'payer_name', value: payerName || '' },
+          ],
+        },
+        callback: async (response) => {
+          setStep('verifying')
+          try {
+            const settleRes = await api.get(`/contributions/verify/paystack/${encodeURIComponent(response.reference || ref)}`)
+            if (settleRes.data.status === 'processed' || settleRes.data.status === 'already_processed') {
+              setStep('success')
+            } else {
+              setLastError(`Payment status: ${settleRes.data.status || 'unknown'}`)
+              setStep('error')
+            }
+          } catch (verifyErr) {
+            setLastError(verifyErr.response?.data?.detail || verifyErr.message || 'Payment verification failed')
+            setStep('error')
+          }
+        },
+        onClose: () => {
+          setStep('amount')
+        },
+      })
+      handler.openIframe()
+      return
+    }
+
+    if (init.authorization_url) {
+      setStep('verifying')
+      window.open(init.authorization_url, '_blank')
+      let attempts = 0
+      const interval = setInterval(async () => {
+        attempts += 1
+        try {
+          const { data } = await api.get(`/contributions/verify/paystack/${encodeURIComponent(ref)}`)
+          if (data.status === 'processed' || data.status === 'already_processed') {
+            clearInterval(interval)
+            setStep('success')
+          } else if (attempts >= 24) {
+            clearInterval(interval)
+            setLastError('Payment could not be confirmed automatically. Please refresh the group page to check.')
+            setStep('error')
+          }
+        } catch {
+          if (attempts >= 24) {
+            clearInterval(interval)
+            setLastError('Verification timed out. The group page will reflect the payment once settled.')
+            setStep('error')
+          }
+        }
+      }, 5000)
+      return
+    }
+
+    if (init.sandbox || init.status === 'completed') {
+      setStep('success')
+      return
+    }
+    setLastError('Paystack SDK not loaded and no hosted checkout URL. Please check your internet connection.')
+    setStep('error')
   }
 
   if (step === 'success') {
@@ -93,10 +224,25 @@ export default function DiasporaPage() {
           Your family will receive an SMS confirmation.
         </p>
         <button 
-          onClick={() => { setStep('select'); setAmountGHS(''); setFoundGroup(null); setSearchCode('') }}
+          onClick={() => { setStep('select'); setAmountGHS(''); setFoundGroup(null); setSearchCode(''); setSelectedGroup(null) }}
           className="mt-8 px-6 py-3 bg-adansi-primary text-adansi-secondary font-bold rounded-xl"
         >
           Send Another
+        </button>
+      </div>
+    )
+  }
+
+  if (step === 'error') {
+    return (
+      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center px-6">
+        <div className="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mb-4">
+          <AlertCircle className="w-10 h-10 text-red-600" />
+        </div>
+        <h2 className="text-xl font-bold text-gray-900 mb-2">Something went wrong</h2>
+        <p className="text-gray-500 text-center mb-6 max-w-sm">{lastError || 'Please try again.'}</p>
+        <button onClick={() => setStep('amount')} className="px-6 py-3 bg-adansi-primary text-adansi-secondary font-bold rounded-xl">
+          Try Again
         </button>
       </div>
     )
@@ -106,8 +252,24 @@ export default function DiasporaPage() {
     return (
       <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center px-6">
         <div className="w-16 h-16 border-4 border-adansi-primary border-t-transparent rounded-full animate-spin mb-4" />
-        <h2 className="text-lg font-bold text-gray-900 mb-2">Processing Payment...</h2>
-        <p className="text-gray-500 text-center text-sm">Please do not close this window</p>
+        <h2 className="text-lg font-bold text-gray-900 mb-2">Preparing card checkout…</h2>
+        <p className="text-gray-500 text-center text-sm">Opening the Paystack payment window</p>
+        <button onClick={() => setStep('amount')} className="mt-6 text-sm text-gray-500 underline">
+          Cancel
+        </button>
+      </div>
+    )
+  }
+
+  if (step === 'verifying') {
+    return (
+      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center px-6">
+        <div className="w-16 h-16 border-4 border-green-500 border-t-transparent rounded-full animate-spin mb-4" />
+        <h2 className="text-lg font-bold text-gray-900 mb-2">Verifying payment…</h2>
+        <div className="flex items-center gap-2 text-xs text-gray-500">
+          <Clock className="w-4 h-4" />
+          <span>Confirming the transaction with Paystack</span>
+        </div>
       </div>
     )
   }
@@ -125,7 +287,6 @@ export default function DiasporaPage() {
           </div>
         </div>
 
-        {/* Exchange Rate Ticker */}
         <div className="flex gap-3 overflow-x-auto scrollbar-hide pb-1">
           {Object.entries(liveRates).map(([curr, data]) => (
             <button
@@ -139,13 +300,24 @@ export default function DiasporaPage() {
               1 {curr} = GHS {data.rate}
             </button>
           ))}
+          {Object.keys(liveRates).length === 0 && (
+            <div className="px-3 py-2 text-xs text-gray-400">Loading rates…</div>
+          )}
         </div>
+
+        {(providerInfo?.active_provider === 'paystack' || providerInfo === null) && (
+          <div className="mt-4 rounded-xl bg-white/5 border border-white/10 px-3 py-2 text-[11px] text-gray-300 flex items-center gap-2">
+            <CreditCard className="w-4 h-4 text-adansi-primary flex-shrink-0" />
+            <span>
+              Provider-agnostic payments in action. Your card contribution is routed through Paystack test mode today. Post-hackathon, Hubtel powers the MoMo settlement layer.
+            </span>
+          </div>
+        )}
       </div>
 
       <div className="px-5 py-6 space-y-6">
         {step === 'select' && (
           <>
-            {/* Search by name or code */}
             <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
               <label className="block text-sm font-medium text-gray-700 mb-2">Find Group by Name or Code</label>
               <div className="relative">
@@ -190,7 +362,6 @@ export default function DiasporaPage() {
               )}
             </div>
 
-            {/* Popular Groups */}
             <div>
               <h3 className="font-bold text-gray-900 mb-3">Popular Groups</h3>
               <div className="space-y-3">
@@ -242,19 +413,30 @@ export default function DiasporaPage() {
               </div>
               {amountGHS && (
                 <p className="text-sm text-gray-500 mt-2">
-                  {liveRates[currency].flag} {foreignAmount} {currency} at live rate {rate.toFixed(4)}{ratesQuery.isFetching ? ' (refreshing...)' : ''}
+                  {liveRates[currency]?.flag} {foreignAmount} {currency} at live rate {rate.toFixed(4)}{ratesQuery.isFetching ? ' (refreshing...)' : ''}
                 </p>
               )}
             </div>
 
             <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-2">Payer Name</label>
+                <label className="block text-xs font-semibold text-gray-700 mb-2">Payer Name (visible to group)</label>
                 <input
                   type="text"
                   value={payerName}
                   onChange={(e) => setPayerName(e.target.value)}
                   placeholder="Enter the name people should see"
+                  className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-adansi-primary"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-2">Email (receipt + Paystack verification)</label>
+                <input
+                  type="email"
+                  value={payerEmail}
+                  onChange={(e) => setPayerEmail(e.target.value)}
+                  placeholder="you@example.com"
                   className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-adansi-primary"
                 />
               </div>
@@ -279,20 +461,22 @@ export default function DiasporaPage() {
               <CreditCard className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
               <div>
                 <p className="text-sm font-medium text-blue-900">Secure Card Payment</p>
-                <p className="text-xs text-blue-700 mt-1">Pay with Visa, Mastercard, or PayPal. Funds settle directly into the group MoMo wallet.</p>
+                <p className="text-xs text-blue-700 mt-1">Pay with Visa, Mastercard, or PayPal via Paystack test mode. Use card <code className="bg-blue-100 px-1 rounded">4084 0840 8408 4081</code> for a successful test payment.</p>
               </div>
             </div>
 
             <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-800">
-              For diaspora users without a Ghana SIM, create an account using your email and keep the payer name here so the group can see who sent the contribution.
+              For diaspora users without a Ghana SIM, create an account using your email on the login page and keep the payer name here so the group can see who sent the contribution.
             </div>
 
             <button
               onClick={handleContribute}
-                disabled={!selectedRate || rate <= 0 || !amountGHS || parseFloat(amountGHS) <= 0 || !payerName.trim()}
+              disabled={!selectedRate || rate <= 0 || !amountGHS || parseFloat(amountGHS) <= 0 || !payerName.trim()}
               className="w-full bg-adansi-primary text-adansi-secondary font-bold py-4 rounded-xl disabled:opacity-50 active:scale-[0.98] transition-transform flex items-center justify-center gap-2"
             >
-              Pay {currencies[currency].flag} {foreignAmount} {currency}
+              <CreditCard className="w-5 h-5" />
+              Pay {currencies[currency]?.flag} {foreignAmount} {currency}
+              <ExternalLink className="w-4 h-4 opacity-60" />
             </button>
 
             <button

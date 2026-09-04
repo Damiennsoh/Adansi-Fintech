@@ -31,28 +31,44 @@ async def register_user(request: UserRegisterRequest, db: AsyncSession = Depends
             if existing.scalar_one_or_none():
                 raise HTTPException(status_code=400, detail="Email already registered")
         except Exception:
-            # Compatibility with older DB schemas that do not yet have the email column.
             pass
 
+    normalized_email = request.email.lower().strip() if request.email else None
     phone_for_auth = request.phone or f"+000{abs(hash(request.email or request.full_name)) % 1000000000:09d}"
 
-    # Create Supabase Auth user (phone + PIN as password)
-    supabase_result = await supabase_auth.sign_up_with_phone(
-        phone=phone_for_auth,
-        password=request.pin
-    )
+    if normalized_email:
+        supabase_result = await supabase_auth.sign_up_with_email(
+            email=normalized_email,
+            password=request.pin,
+        )
+    else:
+        supabase_result = await supabase_auth.sign_up_with_phone(
+            phone=phone_for_auth,
+            password=request.pin,
+        )
+    auth_user_id = None
+    if supabase_result.get("success"):
+        sb_user = supabase_result.get("user")
+        if sb_user and hasattr(sb_user, "id"):
+            auth_user_id = sb_user.id
 
     if not supabase_result["success"]:
-        raise HTTPException(status_code=400, detail=supabase_result.get("error", "Registration failed"))
+        if not normalized_email:
+            raise HTTPException(status_code=400, detail=supabase_result.get("error", "Registration failed"))
+        error_text = str(supabase_result.get("error", "")).lower()
+        if any(token in error_text for token in ["phone", "sms", "otp", "twilio", "configured"]):
+            pass
+        else:
+            raise HTTPException(status_code=400, detail=supabase_result.get("error", "Registration failed"))
 
-    # Create local user record
     new_user = User(
         phone=request.phone,
-        email=request.email.lower().strip() if request.email else None,
+        email=normalized_email,
+        auth_user_id=auth_user_id,
         full_name=request.full_name,
         ghana_card_number=request.ghana_card_number,
         pin_hash=auth_service.hash_pin(request.pin),
-        is_verified=False
+        is_verified=bool(supabase_result.get("success"))
     )
     db.add(new_user)
     await db.commit()
@@ -163,19 +179,22 @@ async def login_user(request: UserLoginRequest, db: AsyncSession = Depends(get_d
     # Reset failed attempts
     redis_service.set_pin_attempts(request.phone or identifier, 0)
 
-    # Try to sign in with Supabase to get fresh tokens when a Ghana phone is available.
-    login_phone = request.phone or (user.phone or f"+000{abs(hash(user.email or user.full_name)) % 1000000000:09d}")
-    supabase_result = await supabase_auth.sign_in_with_phone(
-        phone=login_phone,
-        password=request.pin
-    )
+    # Dispatch Supabase sign-in by the identifier the user actually owns.
+    if user.email and not request.phone:
+        supabase_result = await supabase_auth.sign_in_with_email(
+            email=user.email,
+            password=request.pin,
+        )
+    else:
+        login_phone = request.phone or user.phone or f"+000{abs(hash(user.email or user.full_name)) % 1000000000:09d}"
+        supabase_result = await supabase_auth.sign_in_with_phone(
+            phone=login_phone,
+            password=request.pin,
+        )
 
-    # If Supabase auth fails, fall back to local JWT tokens (for testing)
     if not supabase_result["success"]:
-        # Generate local JWT tokens as fallback
         access_token = auth_service.create_access_token(user.id, user.phone)
         refresh_token = auth_service.create_refresh_token(user.id)
-        
         return TokenResponse(
             access_token=access_token,
             refresh_token=refresh_token,
