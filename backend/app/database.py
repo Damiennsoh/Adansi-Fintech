@@ -1,5 +1,6 @@
 """Database connection and session management."""
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker, text
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
+from sqlalchemy import text
 from sqlalchemy.orm import declarative_base
 from sqlalchemy.pool import NullPool
 from app.config import get_settings
