@@ -1,4 +1,5 @@
 """ADANSI FastAPI application entry point."""
+import importlib
 import json
 import logging
 import sys
@@ -16,6 +17,12 @@ from app.routers import (
     agents_router, ussd_router, whatsapp_router, momo_router, rates_router, admin_router, history_router
 )
 
+# Force-disable stale .pyc bytecode so Render deploys never run outdated modules
+# when source files change across builds.
+sys.dont_write_bytecode = True
+import os
+os.environ.setdefault("PYTHONDONTWRITEBYTECODE", "1")
+
 # Force INFO-level logging + propagate to stdout.
 # Render captures stdout/stderr; default Uvicorn logging config leaves
 # non-`uvicorn.*` loggers at WARN so our lifespan/register_user logs were silent.
@@ -27,6 +34,20 @@ logging.basicConfig(
 logger = logging.getLogger("app.main")
 
 settings = get_settings()
+
+# Reload router modules at import time (before `include_router`) to defeat any
+# stale __pycache__ left by a previous Render build. The actual modules are
+# already in sys.modules because of the `from app.routers import ...` above;
+# reloading them guarantees the `import`ed names point at the new code objects.
+for _router_module in ("app.routers.auth", "app.routers.users", "app.routers.groups",
+                       "app.routers.contributions", "app.routers.withdrawals",
+                       "app.routers.history"):
+    try:
+        mod = importlib.import_module(_router_module)
+        importlib.reload(mod)
+        print(f"[startup] reloaded {_router_module}", flush=True)
+    except Exception as exc:
+        print(f"[startup] reload {_router_module} failed: {exc}", flush=True)
 
 allowed_origins = {
     origin.strip()
