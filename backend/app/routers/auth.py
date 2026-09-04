@@ -60,13 +60,9 @@ async def register_user(request: UserRegisterRequest, db: AsyncSession = Depends
             auth_user_id = sb_user.id
 
     if not supabase_result["success"]:
-        if not normalized_email:
-            raise HTTPException(status_code=400, detail=supabase_result.get("error", "Registration failed"))
-        error_text = str(supabase_result.get("error", "")).lower()
-        if any(token in error_text for token in ["phone", "sms", "otp", "twilio", "configured"]):
-            pass
-        else:
-            raise HTTPException(status_code=400, detail=supabase_result.get("error", "Registration failed"))
+        error_text = str(supabase_result.get("error", "Registration failed"))
+        logger.warning("Supabase registration failed. email=%s phone=%s err=%s", normalized_email, request_phone, error_text)
+        raise HTTPException(status_code=400, detail="Unable to create account. Check your details and try again.")
 
     ghana_card = (
         request.ghana_card_number.strip().upper()

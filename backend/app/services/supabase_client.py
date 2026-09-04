@@ -34,7 +34,6 @@ class SupabaseAuthService:
             response = supabase.auth.sign_up({
                 "email": cleaned_email,
                 "password": password,
-                "options": {"email_confirm": False},
             })
             return {"success": True, "user": response.user, "session": response.session}
         except Exception as e:
