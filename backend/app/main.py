@@ -193,6 +193,18 @@ async def health_check():
     twilio_ok = None if not settings.twilio_account_sid or not settings.twilio_auth_token or not settings.twilio_whatsapp_number else True
     status = build_health_status(database_ok=database_ok, redis_ok=redis_ok, hubtel_ok=hubtel_ok, twilio_ok=twilio_ok)
     status["users_columns"] = users_cols
+    # High-level schema_ok computed from returned dict.
+    if isinstance(users_cols, dict) and "error" not in users_cols:
+        missing = [name for name, info in users_cols.items()
+                   if isinstance(info, dict) and not info.get("exists")]
+        non_nullable_violations = [name for name, info in users_cols.items()
+                                   if isinstance(info, dict) and info.get("exists") and
+                                   name in ("phone", "email", "auth_user_id", "pin_hash",
+                                            "ghana_card_number", "ghana_card_image_url")
+                                   and info.get("nullable") is False]
+        status["schema_ok"] = not missing and not non_nullable_violations
+        status["missing_columns"] = missing
+        status["non_nullable_violations"] = non_nullable_violations
     return status
 
 
@@ -200,15 +212,25 @@ async def health_check():
 async def health_db_schema():
     """Diagnostic endpoint: inspects the deployed users table columns vs what User() expects.
 
-    Opens `/health/db-schema` in-browser to confirm columns exist without needing
-    to trigger a signup flow that rolls back on error.
+    Returns each column with `exists`, `nullable`, `default`.
+    `missing_columns` are columns that don't exist.
+    `non_nullable_violations` are columns that exist but are NOT NULL in Postgres
+    while the Python `User()` model declares them nullable (e.g. phone for email-diaspora signup).
     """
     cols = await diagnose_users_columns()
-    missing = [name for name, present in cols.items() if present is False]
+    if isinstance(cols, dict) and "error" in cols:
+        return cols
+    missing = [name for name, info in cols.items() if not info.get("exists")]
+    non_nullable_violations = [name for name, info in cols.items()
+                               if info.get("exists") and
+                               name in ("phone", "email", "auth_user_id", "pin_hash",
+                                        "ghana_card_number", "ghana_card_image_url")
+                               and info.get("nullable") is False]
     return {
         "users_table": cols,
         "missing_columns": missing,
-        "schema_ok": not missing,
+        "non_nullable_violations": non_nullable_violations,
+        "schema_ok": not missing and not non_nullable_violations,
     }
 
 
