@@ -1,5 +1,7 @@
 """ADANSI FastAPI application entry point."""
+import json
 import logging
+import sys
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -7,14 +9,22 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import get_settings
 from app.services.redis_service import redis_client
 from datetime import datetime
-from app.database import init_db
+from app.database import init_db, patch_users_table, diagnose_users_columns
 from app.routers import (
     auth_router, users_router, groups_router,
     contributions_router, withdrawals_router, credit_router,
     agents_router, ussd_router, whatsapp_router, momo_router, rates_router, admin_router, history_router
 )
 
-logger = logging.getLogger(__name__)
+# Force INFO-level logging + propagate to stdout.
+# Render captures stdout/stderr; default Uvicorn logging config leaves
+# non-`uvicorn.*` loggers at WARN so our lifespan/register_user logs were silent.
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)-5s [%(name)s] %(message)s",
+    stream=sys.stdout,
+)
+logger = logging.getLogger("app.main")
 
 settings = get_settings()
 
@@ -35,27 +45,50 @@ allowed_origins = {
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan: startup and shutdown events."""
-    # Run Alembic migrations on startup (production safety net; render.yaml also runs alembic upgrade head).
+    # ---- (1) Bootstrap DDL patcher ----------------------------------------
+    # This runs BEFORE alembic and BEFORE init_db and uses raw PostgreSQL.
+    # It CANNOT be bypassed (unlike render.yaml startCommand or alembic runs).
+    print("[startup] Running patch_users_table() ...", flush=True)
+    try:
+        patch = await patch_users_table()
+        print(f"[startup] patch_users_table applied={len(patch['applied'])} "
+              f"skipped={len(patch['skipped'])}", flush=True)
+        for ddl in patch["applied"]:
+            print(f"[startup] patch_users_table APPLIED: {ddl}", flush=True)
+        for note in patch["skipped"]:
+            print(f"[startup] patch_users_table SKIPPED: {note}", flush=True)
+        logger.info("patch_users_table result: %s", patch)
+    except Exception as exc:
+        print(f"[startup] patch_users_table FAILED: {exc}", flush=True)
+        logger.exception("patch_users_table FAILED")
+
+    # ---- (2) Alembic -------------------------------------------------------
     try:
         from alembic.config import Config as AlembicConfig
         from alembic import command as alembic_command
         import os
-        alembic_ini = os.path.join(os.path.dirname(os.path.dirname(__file__)), "alembic.ini")
+        backend_dir = os.path.dirname(os.path.dirname(__file__))
+        alembic_ini = os.path.join(backend_dir, "alembic.ini")
         if os.path.exists(alembic_ini):
+            print("[startup] Running alembic upgrade head ...", flush=True)
             cfg = AlembicConfig(alembic_ini)
-            cfg.set_main_option("script_location", os.path.join(os.path.dirname(alembic_ini), "alembic"))
+            cfg.set_main_option("script_location", os.path.join(backend_dir, "alembic"))
             alembic_command.upgrade(cfg, "head")
+            print("[startup] Alembic migrations applied successfully (head)", flush=True)
             logger.info("Alembic migrations applied successfully (head)")
         else:
+            print(f"[startup] Alembic ini not found at {alembic_ini}; skipping auto-migration", flush=True)
             logger.warning("Alembic ini not found at %s; skipping auto-migration", alembic_ini)
     except Exception as exc:
+        print(f"[startup] Alembic auto-migration failed: {exc}", flush=True)
         logger.exception("Alembic auto-migration failed at startup: %s", exc)
 
+    # ---- (3) Dev table creation -------------------------------------------
     if settings.debug:
         try:
             await init_db()  # Create tables in dev (use Alembic in production)
         except Exception as e:
-            print(f"Database connection warning: {e}. FastAPI server running.")
+            print(f"Database connection warning: {e}. FastAPI server running.", flush=True)
     yield
     # Shutdown
     # Cleanup connections if needed
@@ -145,12 +178,36 @@ def build_health_status(database_ok: bool = True, redis_ok: bool = True, hubtel_
 async def health_check():
     """Health check for monitoring and deployment probes."""
     database_ok = True
+    users_cols = {}
     try:
         await init_db()
     except Exception:
         database_ok = False
+    try:
+        users_cols = await diagnose_users_columns()
+    except Exception as exc:
+        users_cols = {"error": str(exc)}
 
     redis_ok = redis_client is not None
     hubtel_ok = None if not settings.hubtel_client_id or not settings.hubtel_client_secret or not settings.hubtel_merchant_id else True
     twilio_ok = None if not settings.twilio_account_sid or not settings.twilio_auth_token or not settings.twilio_whatsapp_number else True
-    return build_health_status(database_ok=database_ok, redis_ok=redis_ok, hubtel_ok=hubtel_ok, twilio_ok=twilio_ok)
+    status = build_health_status(database_ok=database_ok, redis_ok=redis_ok, hubtel_ok=hubtel_ok, twilio_ok=twilio_ok)
+    status["users_columns"] = users_cols
+    return status
+
+
+@app.get("/health/db-schema")
+async def health_db_schema():
+    """Diagnostic endpoint: inspects the deployed users table columns vs what User() expects.
+
+    Opens `/health/db-schema` in-browser to confirm columns exist without needing
+    to trigger a signup flow that rolls back on error.
+    """
+    cols = await diagnose_users_columns()
+    missing = [name for name, present in cols.items() if present is False]
+    return {
+        "users_table": cols,
+        "missing_columns": missing,
+        "schema_ok": not missing,
+    }
+
