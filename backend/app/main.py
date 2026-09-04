@@ -1,4 +1,5 @@
 """ADANSI FastAPI application entry point."""
+import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -12,6 +13,8 @@ from app.routers import (
     contributions_router, withdrawals_router, credit_router,
     agents_router, ussd_router, whatsapp_router, momo_router, rates_router, admin_router, history_router
 )
+
+logger = logging.getLogger(__name__)
 
 settings = get_settings()
 
@@ -32,7 +35,22 @@ allowed_origins = {
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan: startup and shutdown events."""
-    # Startup
+    # Run Alembic migrations on startup (production safety net; render.yaml also runs alembic upgrade head).
+    try:
+        from alembic.config import Config as AlembicConfig
+        from alembic import command as alembic_command
+        import os
+        alembic_ini = os.path.join(os.path.dirname(os.path.dirname(__file__)), "alembic.ini")
+        if os.path.exists(alembic_ini):
+            cfg = AlembicConfig(alembic_ini)
+            cfg.set_main_option("script_location", os.path.join(os.path.dirname(alembic_ini), "alembic"))
+            alembic_command.upgrade(cfg, "head")
+            logger.info("Alembic migrations applied successfully (head)")
+        else:
+            logger.warning("Alembic ini not found at %s; skipping auto-migration", alembic_ini)
+    except Exception as exc:
+        logger.exception("Alembic auto-migration failed at startup: %s", exc)
+
     if settings.debug:
         try:
             await init_db()  # Create tables in dev (use Alembic in production)

@@ -1,4 +1,5 @@
 """Authentication endpoints with full Supabase Auth integration."""
+import logging
 from fastapi import APIRouter, HTTPException, status, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -15,17 +16,21 @@ from app.schemas.auth import (
 )
 from app.models import User
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 
 @router.post("/register", status_code=status.HTTP_201_CREATED)
 async def register_user(request: UserRegisterRequest, db: AsyncSession = Depends(get_db)):
     """Register a new user. Creates Supabase Auth user + local DB record."""
-    if request.phone:
-        existing = await db.execute(select(User).where(User.phone == request.phone))
+    request_phone = request.phone.strip() if isinstance(request.phone, str) and request.phone.strip() else None
+    normalized_email = request.email.lower().strip() if isinstance(request.email, str) and request.email.strip() else None
+
+    if request_phone:
+        existing = await db.execute(select(User).where(User.phone == request_phone))
         if existing.scalar_one_or_none():
             raise HTTPException(status_code=400, detail="Phone number already registered")
-    normalized_email = request.email.lower().strip() if request.email else None
     if normalized_email:
         try:
             existing = await db.execute(select(User).where(User.email == normalized_email))
@@ -33,10 +38,10 @@ async def register_user(request: UserRegisterRequest, db: AsyncSession = Depends
                 raise HTTPException(status_code=400, detail="Email already registered")
         except HTTPException:
             raise
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Could not query users.email column (may be missing migration): %s", exc)
 
-    phone_for_auth = request.phone or f"+000{abs(hash(request.email or request.full_name)) % 1000000000:09d}"
+    phone_for_auth = request_phone or f"+000{abs(hash(normalized_email or request.full_name)) % 1000000000:09d}"
 
     if normalized_email:
         supabase_result = await supabase_auth.sign_up_with_email(
@@ -63,12 +68,17 @@ async def register_user(request: UserRegisterRequest, db: AsyncSession = Depends
         else:
             raise HTTPException(status_code=400, detail=supabase_result.get("error", "Registration failed"))
 
+    ghana_card = (
+        request.ghana_card_number.strip().upper()
+        if isinstance(request.ghana_card_number, str) and request.ghana_card_number.strip()
+        else None
+    )
     new_user = User(
         auth_user_id=auth_user_id,
-        phone=request.phone,
+        phone=request_phone,
         email=normalized_email,
         full_name=request.full_name,
-        ghana_card_number=request.ghana_card_number,
+        ghana_card_number=ghana_card,
         pin_hash=auth_service.hash_pin(request.pin),
         is_verified=bool(supabase_result.get("success"))
     )
@@ -78,18 +88,20 @@ async def register_user(request: UserRegisterRequest, db: AsyncSession = Depends
         await db.refresh(new_user)
     except Exception as exc:
         await db.rollback()
-        # Do not leave an Auth account without its local profile.
         if auth_user_id:
             try:
                 supabase_auth.delete_user(auth_user_id)
             except Exception:
                 pass
-        raise HTTPException(status_code=400, detail="Database error saving new user") from exc
+        db_err = str(exc).strip()
+        logger.exception("Database error saving new user. email=%s phone=%s err=%s", normalized_email, request_phone, db_err)
+        safe_detail = f"Database error saving new user: {db_err}" if db_err else "Database error saving new user"
+        raise HTTPException(status_code=400, detail=safe_detail) from exc
 
     return {
         "message": "User registered successfully. Please verify your phone or continue with email-based onboarding.",
         "user_id": str(new_user.id),
-        "phone": request.phone,
+        "phone": request_phone,
         "email": new_user.email,
     }
 
@@ -157,11 +169,13 @@ async def verify_otp(request: OtpVerifyRequest, db: AsyncSession = Depends(get_d
 @router.post("/login", response_model=TokenResponse)
 async def login_user(request: UserLoginRequest, db: AsyncSession = Depends(get_db)):
     """Login with phone + PIN. Returns Supabase JWT tokens."""
-    print(f"Login attempt - Phone: {request.phone}, PIN: {request.pin}")
-    
-    identifier = request.identifier
-    if request.phone:
-        attempts = redis_service.get_pin_attempts(request.phone)
+    request_phone = request.phone.strip() if isinstance(request.phone, str) and request.phone.strip() else None
+    cleaned_email = request.email.lower().strip() if isinstance(request.email, str) and request.email.strip() else None
+    identifier = cleaned_email or request_phone or ""
+    print(f"Login attempt - Phone: {request_phone}, Email: {cleaned_email}, PIN: {request.pin}")
+
+    if request_phone:
+        attempts = redis_service.get_pin_attempts(request_phone)
         if attempts >= 5:
             raise HTTPException(status_code=429, detail="Too many failed attempts. Try again in 15 minutes.")
     else:
@@ -170,14 +184,19 @@ async def login_user(request: UserLoginRequest, db: AsyncSession = Depends(get_d
             raise HTTPException(status_code=429, detail="Too many failed attempts. Try again in 15 minutes.")
 
     try:
-        user_result = await db.execute(
-            select(User).where(
-                (User.phone == request.phone) | (User.email == identifier.lower().strip())
-            )
-        )
-    except Exception:
+        where_clause = []
+        if request_phone:
+            where_clause.append(User.phone == request_phone)
+        if cleaned_email:
+            where_clause.append(User.email == cleaned_email)
+        if not where_clause:
+            raise HTTPException(status_code=400, detail="Either phone or email is required")
+        from sqlalchemy import or_
+        user_result = await db.execute(select(User).where(or_(*where_clause)))
+    except Exception as exc:
         # Older deployments may not yet have the email column in users.
-        user_result = await db.execute(select(User).where(User.phone == request.phone))
+        logger.warning("Falling back to phone-only lookup in login: %s", exc)
+        user_result = await db.execute(select(User).where(User.phone == request_phone))
     user = user_result.scalar_one_or_none()
 
     if user:
@@ -185,20 +204,20 @@ async def login_user(request: UserLoginRequest, db: AsyncSession = Depends(get_d
 
     if not user or not auth_service.verify_pin(request.pin, user.pin_hash):
         print(f"PIN verification failed")
-        redis_service.set_pin_attempts(request.phone or identifier, attempts + 1)
+        redis_service.set_pin_attempts(request_phone or identifier, attempts + 1)
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
     # Reset failed attempts
-    redis_service.set_pin_attempts(request.phone or identifier, 0)
+    redis_service.set_pin_attempts(request_phone or identifier, 0)
 
     # Dispatch Supabase sign-in by the identifier the user actually owns.
-    if user.email and not request.phone:
+    if user.email and not request_phone:
         supabase_result = await supabase_auth.sign_in_with_email(
             email=user.email,
             password=request.pin,
         )
     else:
-        login_phone = request.phone or user.phone or f"+000{abs(hash(user.email or user.full_name)) % 1000000000:09d}"
+        login_phone = request_phone or user.phone or f"+000{abs(hash(user.email or user.full_name)) % 1000000000:09d}"
         supabase_result = await supabase_auth.sign_in_with_phone(
             phone=login_phone,
             password=request.pin,
