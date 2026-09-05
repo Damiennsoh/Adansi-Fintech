@@ -17,11 +17,30 @@ depends_on = None
 
 
 def upgrade() -> None:
-    # Add rotation_queue column (JSONB type)
-    op.add_column('groups', sa.Column('rotation_queue', postgresql.JSONB(), nullable=True, server_default='[]'))
+    # Check if columns already exist before adding them
+    conn = op.get_bind()
     
-    # Add rotation_enabled column (Boolean type)
-    op.add_column('groups', sa.Column('rotation_enabled', sa.Boolean(), nullable=True, server_default='false'))
+    # Check rotation_queue
+    rotation_queue_exists = conn.execute(sa.text("""
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_name = 'groups' 
+        AND column_name = 'rotation_queue'
+    """)).scalar()
+    
+    if not rotation_queue_exists:
+        op.add_column('groups', sa.Column('rotation_queue', postgresql.JSONB(), nullable=True, server_default='[]'))
+    
+    # Check rotation_enabled
+    rotation_enabled_exists = conn.execute(sa.text("""
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_name = 'groups' 
+        AND column_name = 'rotation_enabled'
+    """)).scalar()
+    
+    if not rotation_enabled_exists:
+        op.add_column('groups', sa.Column('rotation_enabled', sa.Boolean(), nullable=True, server_default='false'))
 
 
 def downgrade() -> None:
