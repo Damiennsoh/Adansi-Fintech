@@ -28,7 +28,7 @@ class SupabaseAuthService:
 
     @staticmethod
     async def sign_up_with_email(email: str, password: str) -> dict:
-        """Register a diaspora user with email + PIN. Supabase will send a confirmation email."""
+        """Register a diaspora user with an email password."""
         try:
             cleaned_email = email.lower().strip()
             response = supabase.auth.sign_up({

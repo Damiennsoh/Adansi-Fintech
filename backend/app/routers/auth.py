@@ -46,7 +46,7 @@ async def register_user(request: UserRegisterRequest, db: AsyncSession = Depends
     if normalized_email:
         supabase_result = await supabase_auth.sign_up_with_email(
             email=normalized_email,
-            password=request.pin,
+            password=request.password,
         )
     else:
         supabase_result = await supabase_auth.sign_up_with_phone(
@@ -75,7 +75,7 @@ async def register_user(request: UserRegisterRequest, db: AsyncSession = Depends
         email=normalized_email,
         full_name=request.full_name,
         ghana_card_number=ghana_card,
-        pin_hash=auth_service.hash_pin(request.pin),
+        pin_hash=auth_service.hash_pin(request.password if normalized_email else request.pin),
         is_verified=bool(supabase_result.get("success"))
     )
     db.add(new_user)
@@ -164,11 +164,11 @@ async def verify_otp(request: OtpVerifyRequest, db: AsyncSession = Depends(get_d
 
 @router.post("/login", response_model=TokenResponse)
 async def login_user(request: UserLoginRequest, db: AsyncSession = Depends(get_db)):
-    """Login with phone + PIN. Returns Supabase JWT tokens."""
+    """Login with phone + PIN or email + password."""
     request_phone = request.phone.strip() if isinstance(request.phone, str) and request.phone.strip() else None
     cleaned_email = request.email.lower().strip() if isinstance(request.email, str) and request.email.strip() else None
     identifier = cleaned_email or request_phone or ""
-    print(f"Login attempt - Phone: {request_phone}, Email: {cleaned_email}, PIN: {request.pin}")
+    credential = request.password if cleaned_email and not request_phone else request.pin
 
     if request_phone:
         attempts = redis_service.get_pin_attempts(request_phone)
@@ -198,8 +198,8 @@ async def login_user(request: UserLoginRequest, db: AsyncSession = Depends(get_d
     if user:
         print(f"User found by {user.phone or user.email}, PIN hash exists: {user.pin_hash is not None}")
 
-    if not user or not auth_service.verify_pin(request.pin, user.pin_hash):
-        print(f"PIN verification failed")
+    if not user or not auth_service.verify_pin(credential, user.pin_hash):
+        print("Credential verification failed")
         redis_service.set_pin_attempts(request_phone or identifier, attempts + 1)
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
@@ -210,13 +210,13 @@ async def login_user(request: UserLoginRequest, db: AsyncSession = Depends(get_d
     if user.email and not request_phone:
         supabase_result = await supabase_auth.sign_in_with_email(
             email=user.email,
-            password=request.pin,
+            password=credential,
         )
     else:
         login_phone = request_phone or user.phone or f"+000{abs(hash(user.email or user.full_name)) % 1000000000:09d}"
         supabase_result = await supabase_auth.sign_in_with_phone(
             phone=login_phone,
-            password=request.pin,
+            password=credential,
         )
 
     if not supabase_result["success"]:
