@@ -7,10 +7,12 @@ import api from '../lib/api'
 export default function LoginPage() {
   const [mode, setMode] = useState('phone')
   const [phoneAction, setPhoneAction] = useState('otp')
+  const [emailAction, setEmailAction] = useState('signup')
   const [phone, setPhone] = useState('')
   const [email, setEmail] = useState('')
   const [fullName, setFullName] = useState('')
   const [pin, setPin] = useState('')
+  const [password, setPassword] = useState('')
   const { sendOTP, loginWithPIN } = useAuth()
   const navigate = useNavigate()
 
@@ -40,18 +42,31 @@ export default function LoginPage() {
     }
   }
 
+  const handleEmailLogin = async (e) => {
+    e.preventDefault()
+    if (!email || password.length < 6) return
+
+    try {
+      await loginWithPIN.mutateAsync({ email, password })
+      navigate('/dashboard')
+    } catch (err) {
+      alert(err.response?.data?.detail || 'Invalid email or password. Please try again.')
+    }
+  }
+
   const handleEmailRegister = async (e) => {
     e.preventDefault()
-    if (!email || !fullName || pin.length < 4) return
+    if (!email || !fullName || password.length < 6) return
 
     try {
       const response = await api.post('/auth/register', {
         email: email.trim().toLowerCase(),
         full_name: fullName.trim(),
-        pin,
+        password,
       })
       alert(response.data?.message || 'Account created. Check your email to verify your account, then sign in.')
-      setPin('')
+      setPassword('')
+      setEmailAction('login')
     } catch (err) {
       alert(err.response?.data?.detail || 'We could not create your account. Please try again.')
     }
@@ -187,11 +202,28 @@ export default function LoginPage() {
         ) : (
           <div className="space-y-4">
             <div className="rounded-xl border border-white/10 bg-white/5 p-3 text-xs text-gray-300">
-              Diaspora users can create an account with email and keep the payer name visible for group contributions.
+              Use your email address and password to create an account or sign in.
             </div>
 
-            <form onSubmit={handleEmailRegister} className="space-y-4">
-              <div>
+            <div className="grid grid-cols-2 gap-2 rounded-xl bg-white/5 p-1 border border-white/10">
+              <button
+                type="button"
+                onClick={() => setEmailAction('signup')}
+                className={`py-2.5 rounded-lg text-sm font-medium transition ${emailAction === 'signup' ? 'bg-adansi-primary text-adansi-secondary' : 'text-gray-300'}`}
+              >
+                Create account
+              </button>
+              <button
+                type="button"
+                onClick={() => setEmailAction('login')}
+                className={`py-2.5 rounded-lg text-sm font-medium transition ${emailAction === 'login' ? 'bg-adansi-primary text-adansi-secondary' : 'text-gray-300'}`}
+              >
+                Sign in
+              </button>
+            </div>
+
+            <form onSubmit={emailAction === 'signup' ? handleEmailRegister : handleEmailLogin} className="space-y-4">
+              {emailAction === 'signup' && <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">Full Name</label>
                 <div className="relative">
                   <UserRound className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
@@ -203,7 +235,7 @@ export default function LoginPage() {
                     className="w-full pl-12 pr-4 py-4 bg-white/10 border border-white/20 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-adansi-primary"
                   />
                 </div>
-              </div>
+              </div>}
 
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">Email Address</label>
@@ -220,16 +252,15 @@ export default function LoginPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">Create PIN</label>
+                <label className="block text-sm font-medium text-gray-300 mb-2">Password</label>
                 <div className="relative">
                   <LockKeyhole className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
                   <input
                     type="password"
-                    inputMode="numeric"
-                    maxLength={6}
-                    value={pin}
-                    onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                    placeholder="••••"
+                    minLength={6}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="At least 6 characters"
                     className="w-full pl-12 pr-4 py-4 bg-white/10 border border-white/20 rounded-xl text-white text-center tracking-[0.4em] placeholder-gray-500 focus:outline-none focus:border-adansi-primary"
                   />
                 </div>
@@ -237,10 +268,10 @@ export default function LoginPage() {
 
               <button
                 type="submit"
-                disabled={loginWithPIN.isPending || !email || !fullName || pin.length < 4}
+                disabled={loginWithPIN.isPending || !email || (emailAction === 'signup' && !fullName) || password.length < 6}
                 className="w-full bg-adansi-primary text-adansi-secondary font-bold py-4 rounded-xl disabled:opacity-50 active:scale-[0.98] transition-transform flex items-center justify-center gap-2"
               >
-                {loginWithPIN.isPending ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Create Email Account'}
+                {loginWithPIN.isPending ? <Loader2 className="w-5 h-5 animate-spin" /> : emailAction === 'signup' ? 'Create Email Account' : 'Sign in with Email'}
               </button>
 
               <button

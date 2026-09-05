@@ -83,7 +83,7 @@ def test_user_register_request_allows_email_based_diaspora_signup():
     payload = UserRegisterRequest.model_validate({
         "email": "diaspora@example.com",
         "full_name": "Ama Boateng",
-        "pin": "1234",
+        "password": "strong-password",
     })
 
     assert payload.email == "diaspora@example.com"
