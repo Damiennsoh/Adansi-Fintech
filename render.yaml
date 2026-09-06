@@ -1,6 +1,7 @@
 services:
   - type: web
     name: adansi-fintech-api
+    branch: main
     runtime: python
     rootDir: backend
     buildCommand: pip install -r requirements.txt
