@@ -134,7 +134,8 @@ async def get_group(group_id: UUID, current_user: User = Depends(get_current_use
     group = result.scalar_one_or_none()
     if not group:
         raise HTTPException(status_code=404, detail="Group not found")
-
+    await group_service.reconcile_group_balance(db, group_id)
+    await db.commit()
     return group
 
 
@@ -162,8 +163,50 @@ async def join_group(group_id: UUID, current_user: User = Depends(get_current_us
 async def get_group_audit(group_id: UUID, current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     member = await db.execute(select(GroupMember).where(GroupMember.group_id == group_id, GroupMember.user_id == current_user.id))
     if not member.scalar_one_or_none(): raise HTTPException(status_code=403, detail="Not a member")
-    result = await db.execute(select(AuditEvent).where(AuditEvent.group_id == group_id).order_by(AuditEvent.created_at.desc()).limit(100))
-    return {"events": [{"id": str(e.id), "event_type": e.event_type, "entity_type": e.entity_type, "entity_id": str(e.entity_id) if e.entity_id else None, "amount": float(e.amount) if e.amount is not None else None, "metadata": e.event_metadata, "created_at": e.created_at} for e in result.scalars().all()]}
+    result = await db.execute(select(AuditEvent, User.full_name.label("actor_name")).outerjoin(User, AuditEvent.actor_id == User.id).where(AuditEvent.group_id == group_id).order_by(AuditEvent.created_at.desc()).limit(100))
+    return {"events": [{"id": str(e.id), "event_type": e.event_type, "entity_type": e.entity_type, "entity_id": str(e.entity_id) if e.entity_id else None, "amount": float(e.amount) if e.amount is not None else None, "metadata": e.event_metadata, "actor_id": str(e.actor_id) if e.actor_id else None, "actor_name": actor_name or "System", "created_at": e.created_at} for e, actor_name in result.all()]}
+
+@router.get("/{group_id}/ledger")
+async def get_group_ledger(group_id: UUID, current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    """Return the complete group ledger, not just the current member's history."""
+    membership = await db.scalar(select(GroupMember).where(GroupMember.group_id == group_id, GroupMember.user_id == current_user.id, GroupMember.archived_at.is_(None)))
+    if not membership:
+        raise HTTPException(status_code=403, detail="Not an active member")
+    group = await db.get(Group, group_id)
+    if not group:
+        raise HTTPException(status_code=404, detail="Group not found")
+    contributions = (await db.execute(select(Contribution).where(Contribution.group_id == group_id, Contribution.status == "completed").order_by(Contribution.created_at.desc()))).scalars().all()
+    return {"group": {"id": str(group.id), "name": group.name, "code": group.code, "type": group.type, "balance": float(group.current_balance or 0), "target_amount": float(group.target_amount or 0)}, "entries": [{"id": str(c.id), "type": "contribution", "amount": float(c.amount), "status": c.status, "method": c.method, "reference": c.transaction_ref, "created_at": c.created_at, "member_name": c.user.full_name if c.user else "Member"} for c in contributions]}
+
+
+@router.get("/{group_id}/ledger.pdf")
+async def export_group_ledger_pdf(group_id: UUID, current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    """Generate a downloadable financial statement for admins and treasurers."""
+    from io import BytesIO
+    from fastapi.responses import StreamingResponse
+    from reportlab.lib.pagesizes import A4
+    from reportlab.pdfgen import canvas
+    member = await db.scalar(select(GroupMember).where(GroupMember.group_id == group_id, GroupMember.user_id == current_user.id, GroupMember.role.in_(["admin", "treasurer"]), GroupMember.archived_at.is_(None)))
+    if not member:
+        raise HTTPException(status_code=403, detail="Only admins and treasurers can export statements")
+    group = await db.get(Group, group_id)
+    if not group:
+        raise HTTPException(status_code=404, detail="Group not found")
+    entries = (await db.execute(select(Contribution).where(Contribution.group_id == group_id, Contribution.status == "completed").order_by(Contribution.created_at.asc()))).scalars().all()
+    buffer = BytesIO(); pdf = canvas.Canvas(buffer, pagesize=A4); width, height = A4; y = height - 48
+    pdf.setTitle(f"{group.name} financial statement")
+    pdf.setFont("Helvetica-Bold", 16); pdf.drawString(40, y, group.name); y -= 22
+    pdf.setFont("Helvetica", 10); pdf.drawString(40, y, f"Financial statement • Code {group.code} • Balance: GHS {float(group.current_balance or 0):,.2f}"); y -= 28
+    pdf.setFont("Helvetica-Bold", 10); pdf.drawString(40, y, "Date"); pdf.drawString(130, y, "Contributor"); pdf.drawString(370, y, "Method"); pdf.drawRightString(555, y, "Amount (GHS)"); y -= 16
+    pdf.setFont("Helvetica", 9)
+    for entry in entries:
+        if y < 48: pdf.showPage(); y = height - 48; pdf.setFont("Helvetica", 9)
+        date = entry.created_at.strftime("%Y-%m-%d") if entry.created_at else "-"
+        pdf.drawString(40, y, date); pdf.drawString(130, y, (entry.user.full_name if entry.user else "Member")[:30])
+        pdf.drawString(370, y, entry.method or "-" ); pdf.drawRightString(555, y, f"{float(entry.amount):,.2f}"); y -= 15
+    pdf.save(); buffer.seek(0)
+    return StreamingResponse(buffer, media_type="application/pdf", headers={"Content-Disposition": f'attachment; filename="{group.code}-financial-statement.pdf"'})
+
 
 @router.get("/{group_id}/join-requests")
 async def get_join_requests(group_id: UUID, current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
@@ -332,6 +375,23 @@ async def remove_member(
     db.add(AuditEvent(group_id=group_id, actor_id=current_user.id, event_type="member_removed", entity_type="group_member", entity_id=member.id, event_metadata={"target_user_id": str(user_id)}))
     await db.commit()
     return {"message": "Member removed", "user_id": str(user_id)}
+
+
+@router.post("/{group_id}/members/{user_id}/archive")
+async def archive_member(group_id: UUID, user_id: UUID, current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    """Archive membership without deleting contribution history."""
+    admin = await db.scalar(select(GroupMember).where(GroupMember.group_id == group_id, GroupMember.user_id == current_user.id, GroupMember.role == "admin", GroupMember.archived_at.is_(None)))
+    if not admin:
+        raise HTTPException(status_code=403, detail="Only admins can archive members")
+    member = await db.scalar(select(GroupMember).where(GroupMember.group_id == group_id, GroupMember.user_id == user_id, GroupMember.archived_at.is_(None)))
+    if not member:
+        raise HTTPException(status_code=404, detail="Active member not found")
+    if member.role == "admin" and (await db.scalar(select(func.count()).select_from(GroupMember).where(GroupMember.group_id == group_id, GroupMember.role == "admin", GroupMember.archived_at.is_(None))) or 0) <= 1:
+        raise HTTPException(status_code=400, detail="A group must always have an active admin")
+    member.archived_at = datetime.utcnow()
+    db.add(AuditEvent(group_id=group_id, actor_id=current_user.id, event_type="member_archived", entity_type="group_member", entity_id=member.id, event_metadata={"target_user_id": str(user_id)}))
+    await db.commit()
+    return {"message": "Member archived", "user_id": str(user_id)}
 
 
 @router.get("/{group_id}/balance")

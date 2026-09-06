@@ -53,6 +53,7 @@ class GroupMember(Base):
     contribution_streak = Column(Integer, default=0)
     total_contributed = Column(DECIMAL(15, 2), default=0)
     last_contribution_at = Column(DateTime(timezone=True), nullable=True)
+    archived_at = Column(DateTime(timezone=True), nullable=True)
 
     # Relationships
     group = relationship("Group", back_populates="members")

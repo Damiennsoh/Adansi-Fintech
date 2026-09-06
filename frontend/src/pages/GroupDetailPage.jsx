@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
-import { ArrowLeft, Users, Copy, Share2, Phone, Wallet, ArrowUpRight, ArrowDownLeft, Clock, CheckCircle2 } from 'lucide-react'
+import { ArrowLeft, Users, Copy, Share2, Phone, Wallet, ArrowUpRight, ArrowDownLeft, Clock, CheckCircle2, FileDown, Archive } from 'lucide-react'
 import { useGroupDetail } from '../hooks/useGroups'
 import { useWithdrawals } from '../hooks/useContributions'
 import { useRealtimeContributions } from '../hooks/useRealtime'
@@ -23,11 +23,17 @@ export default function GroupDetailPage() {
   const [searchParams] = useSearchParams()
   const initialTab = searchParams.get('tab') || 'activity'
   const { user } = useAuthStore()
-  const { group, transactions, auditEvents, joinRequests, pendingWithdrawals, reviewJoinRequest, members, updateMemberRole, isLoading } = useGroupDetail(id)
+  const { group, transactions, auditEvents, joinRequests, pendingWithdrawals, reviewJoinRequest, members, updateMemberRole, archiveMember, groupLedger, isLoading } = useGroupDetail(id)
   const { approveWithdrawal } = useWithdrawals()
   const [activeTab, setActiveTab] = useState(initialTab)
   const [showUSSD, setShowUSSD] = useState(false)
   const [copied, setCopied] = useState(false)
+
+  const downloadStatement = async () => {
+    const response = await api.get(`/groups/${id}/ledger.pdf`, { responseType: 'blob' })
+    const url = URL.createObjectURL(response.data)
+    const link = document.createElement('a'); link.href = url; link.download = `${group.code}-financial-statement.pdf`; link.click(); URL.revokeObjectURL(url)
+  }
 
   const { data: memberLedger = [] } = useQuery({
     queryKey: ['group-ledger', id],
@@ -322,16 +328,18 @@ export default function GroupDetailPage() {
             {auditEvents.length === 0 ? <p className="p-8 text-center text-sm text-gray-500">No audit events yet.</p> : auditEvents.map((event) => (
               <div key={event.id} className="flex items-start gap-3 py-3 px-4 border-b border-gray-50 last:border-0">
                 <div className="w-8 h-8 rounded-full bg-adansi-primary/20 flex items-center justify-center"><Clock className="w-4 h-4 text-adansi-secondary" /></div>
-                <div className="flex-1"><p className="font-medium text-gray-900 text-sm">{event.event_type.replaceAll('_', ' ')}</p><p className="text-xs text-gray-500">{event.entity_type} • {formatRelativeTime(event.created_at)}</p></div>
+                <div className="flex-1"><p className="font-medium text-gray-900 text-sm">{event.event_type.replaceAll('_', ' ')}</p><p className="text-xs text-gray-500">{event.entity_type} • {event.actor_name || 'System'} • {formatRelativeTime(event.created_at)}</p></div>
                 {event.amount != null && <span className="text-sm font-semibold">{formatCurrency(event.amount)}</span>}
               </div>
             ))}
           </div>
         ) : activeTab === 'ledger' ? (
+          <div className="space-y-3">
+            {canManageRoles && <button onClick={downloadStatement} className="w-full flex items-center justify-center gap-2 rounded-xl bg-adansi-secondary px-4 py-3 text-sm font-semibold text-white"><FileDown className="h-4 w-4" /> Export financial statement</button>}
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-            {memberLedger.length === 0 ? (
-              <p className="p-8 text-center text-sm text-gray-500">No contribution or benefit history yet.</p>
-            ) : memberLedger.map((entry) => {
+            {groupLedger.entries.length === 0 ? (
+              <p className="p-8 text-center text-sm text-gray-500">No completed contribution history yet.</p>
+            ) : groupLedger.entries.map((entry) => {
               const isContribution = entry.type === 'contribution'
               return (
                 <div key={`${entry.type}-${entry.id}`} className="flex items-center gap-3 py-3 px-4 border-b border-gray-50 last:border-0">
@@ -352,9 +360,10 @@ export default function GroupDetailPage() {
               )
             })}
           </div>
+          </div>
         ) : (
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-            {members.map((member, i) => (
+            {members.filter((member) => !member.archived_at).map((member, i) => (
               <div key={member.id || i} className="flex items-center gap-3 py-3 px-4 border-b border-gray-50 last:border-0">
                 <div className="w-10 h-10 rounded-full bg-adansi-secondary text-white flex items-center justify-center font-bold text-sm">
                   {(member.name || member.full_name || '?').charAt(0)}
@@ -380,6 +389,9 @@ export default function GroupDetailPage() {
                     <option value="treasurer">Treasurer</option>
                     <option value="admin">Admin</option>
                   </select>
+                )}
+                {canManageRoles && member.user_id !== user?.id && (
+                  <button onClick={() => { if (window.confirm(`Archive ${member.name || 'this member'}? Their financial history will be preserved.`)) archiveMember.mutate({ userId: member.user_id }) }} className="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-700" aria-label={`Archive ${member.name || 'member'}`}><Archive className="h-4 w-4" /></button>
                 )}
               </div>
             ))}

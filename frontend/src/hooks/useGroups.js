@@ -124,6 +124,21 @@ export function useGroupDetail(groupId) {
     },
   })
 
+  const groupLedgerQuery = useQuery({
+    queryKey: ['group-ledger', groupId],
+    queryFn: async () => (await api.get(`/groups/${groupId}/ledger`)).data,
+    enabled: !!groupId,
+  })
+
+  const archiveMember = useMutation({
+    mutationFn: async ({ userId }) => (await api.post(`/groups/${groupId}/members/${userId}/archive`)).data,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['group', groupId] })
+      queryClient.invalidateQueries({ queryKey: ['members', groupId] })
+      queryClient.invalidateQueries({ queryKey: ['audit', groupId] })
+    },
+  })
+
   const membersQuery = useQuery({
     queryKey: ['members', groupId],
     queryFn: async () => {
@@ -168,5 +183,7 @@ export function useGroupDetail(groupId) {
     isLoading: groupQuery.isLoading,
     inviteMember,
     updateMemberRole,
+    archiveMember,
+    groupLedger: groupLedgerQuery.data || { entries: [], group: null },
   }
 }
