@@ -69,16 +69,31 @@ async def register_user(request: UserRegisterRequest, db: AsyncSession = Depends
         if isinstance(request.ghana_card_number, str) and request.ghana_card_number.strip()
         else None
     )
-    new_user = User(
-        auth_user_id=auth_user_id,
-        phone=request_phone,
-        email=normalized_email,
-        full_name=request.full_name,
-        ghana_card_number=ghana_card,
-        pin_hash=auth_service.hash_pin(request.password if normalized_email else request.pin),
-        is_verified=bool(supabase_result.get("success"))
-    )
-    db.add(new_user)
+    new_user = None
+    if auth_user_id:
+        existing_auth_user = await db.execute(
+            select(User).where(User.auth_user_id == auth_user_id)
+        )
+        new_user = existing_auth_user.scalar_one_or_none()
+
+    if new_user:
+        new_user.phone = request_phone
+        new_user.email = normalized_email
+        new_user.full_name = request.full_name
+        new_user.ghana_card_number = ghana_card
+        new_user.pin_hash = auth_service.hash_pin(request.password if normalized_email else request.pin)
+        new_user.is_verified = bool(supabase_result.get("success"))
+    else:
+        new_user = User(
+            auth_user_id=auth_user_id,
+            phone=request_phone,
+            email=normalized_email,
+            full_name=request.full_name,
+            ghana_card_number=ghana_card,
+            pin_hash=auth_service.hash_pin(request.password if normalized_email else request.pin),
+            is_verified=bool(supabase_result.get("success"))
+        )
+        db.add(new_user)
     try:
         await db.commit()
         await db.refresh(new_user)
