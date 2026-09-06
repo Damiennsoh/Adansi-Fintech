@@ -205,34 +205,35 @@ async def login_user(request: UserLoginRequest, db: AsyncSession = Depends(get_d
         from sqlalchemy import or_
         user_result = await db.execute(select(User).where(or_(*where_clause)))
     except Exception as exc:
-        # Older deployments may not yet have the email column in users.
-        logger.warning("Falling back to phone-only lookup in login: %s", exc)
-        user_result = await db.execute(select(User).where(User.phone == request_phone))
+        logger.exception("User lookup failed during login")
+        raise HTTPException(status_code=503, detail="Authentication service temporarily unavailable") from exc
     user = user_result.scalar_one_or_none()
 
-    if user:
-        print(f"User found by {user.phone or user.email}, PIN hash exists: {user.pin_hash is not None}")
-
-    if not user or not auth_service.verify_pin(credential, user.pin_hash):
-        print("Credential verification failed")
+    if not user:
         redis_service.set_pin_attempts(request_phone or identifier, attempts + 1)
-        raise HTTPException(status_code=401, detail="Invalid credentials")
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+
+    # Email credentials belong to Supabase Auth. Do not compare an email
+    # password with the local PIN hash; phone users continue using local PINs.
+    if cleaned_email and not request_phone:
+        supabase_result = await supabase_auth.sign_in_with_email(
+            email=cleaned_email,
+            password=credential,
+        )
+        if not supabase_result["success"]:
+            redis_service.set_pin_attempts(identifier, attempts + 1)
+            raise HTTPException(status_code=401, detail="Invalid email or password")
+    elif not auth_service.verify_pin(credential, user.pin_hash):
+        redis_service.set_pin_attempts(identifier, attempts + 1)
+        raise HTTPException(status_code=401, detail="Invalid phone or PIN")
+    else:
+        supabase_result = await supabase_auth.sign_in_with_phone(
+            phone=request_phone or user.phone,
+            password=credential,
+        )
 
     # Reset failed attempts
     redis_service.set_pin_attempts(request_phone or identifier, 0)
-
-    # Dispatch Supabase sign-in by the identifier the user actually owns.
-    if user.email and not request_phone:
-        supabase_result = await supabase_auth.sign_in_with_email(
-            email=user.email,
-            password=credential,
-        )
-    else:
-        login_phone = request_phone or user.phone or f"+000{abs(hash(user.email or user.full_name)) % 1000000000:09d}"
-        supabase_result = await supabase_auth.sign_in_with_phone(
-            phone=login_phone,
-            password=credential,
-        )
 
     if not supabase_result["success"]:
         access_token = auth_service.create_access_token(user.id, user.phone)

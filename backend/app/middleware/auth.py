@@ -7,6 +7,7 @@ from uuid import UUID
 from app.config import get_settings
 from app.database import AsyncSessionLocal
 from app.models import User
+from app.services.supabase_client import supabase_auth
 from sqlalchemy import select
 
 settings = get_settings()
@@ -42,24 +43,23 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
     token = credentials.credentials
     payload = None
     user_id = None
+    auth_email = None
 
     print(f"Auth middleware: Attempting to verify token")
 
-    # Try Supabase JWT first
-    try:
-        payload = jwt.decode(
-            token,
-            settings.supabase_jwt_secret,
-            algorithms=["HS256"],
-            audience="authenticated"
-        )
-        user_id = payload.get("sub")
-        print(f"Auth middleware: Supabase JWT success, user_id: {user_id}")
-    except JWTError as e:
-        print(f"Auth middleware: Supabase JWT failed: {e}")
-        pass
+    # Supabase may issue ES256 access tokens. Ask Supabase Auth to validate the
+    # token instead of assuming the legacy HS256 JWT secret is in use.
+    if token:
+        supabase_result = await supabase_auth.get_user_by_token(token)
+        if supabase_result.get("success"):
+            auth_user = supabase_result.get("user")
+            user_id = getattr(auth_user, "id", None)
+            auth_email = getattr(auth_user, "email", None)
+            print(f"Auth middleware: Supabase Auth success, user_id: {user_id}")
+        else:
+            print(f"Auth middleware: Supabase Auth validation failed: {supabase_result.get('error')}")
 
-    # Fall back to local JWT if Supabase fails
+    # Fall back to local JWT only when this is one of the app's own tokens.
     if not user_id:
         try:
             payload = jwt.decode(
@@ -100,6 +100,16 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
             )
             user = result.scalar_one_or_none()
             print(f"Auth middleware: User found by id: {user is not None}")
+
+        if not user and auth_email:
+            result = await session.execute(
+                select(User).where(User.email == auth_email.lower())
+            )
+            user = result.scalar_one_or_none()
+            if user and uuid_user_id is not None and user.auth_user_id != uuid_user_id:
+                user.auth_user_id = uuid_user_id
+                await session.commit()
+            print(f"Auth middleware: User found by email fallback: {user is not None}")
 
         if not user and phone_user_id:
             result = await session.execute(

@@ -4,8 +4,9 @@ import json
 import logging
 import sys
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.config import get_settings
 from app.services.redis_service import redis_client
@@ -123,6 +124,19 @@ app = FastAPI(
     docs_url="/docs",
     redoc_url="/redoc"
 )
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    """Return JSON errors with CORS headers instead of opaque browser failures."""
+    logger.exception("Unhandled API error: %s", exc)
+    origin = request.headers.get("origin")
+    headers = {}
+    if origin and (origin in allowed_origins or origin.endswith(".vercel.app")):
+        headers["Access-Control-Allow-Origin"] = origin
+        headers["Access-Control-Allow-Credentials"] = "true"
+        headers["Vary"] = "Origin"
+    return JSONResponse(status_code=500, content={"detail": "Internal server error"}, headers=headers)
+
 
 # CORS: Allow frontend origin
 app.add_middleware(
