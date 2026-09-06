@@ -5,8 +5,8 @@ export function useContributions() {
   const queryClient = useQueryClient()
 
   const contribute = useMutation({
-    mutationFn: async ({ groupId, amount, network = 'mtn' }) => {
-      const { data } = await api.post('/contributions', { group_id: groupId, amount, network })
+    mutationFn: async ({ groupId, amount, network = 'mtn', payerPhone }) => {
+      const { data } = await api.post('/contributions', { group_id: groupId, amount, network, payer_phone: payerPhone || undefined })
       return data
     },
     onSuccess: (_, variables) => {

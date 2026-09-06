@@ -35,7 +35,7 @@ def provider_info():
     summary = provider_mode_summary()
     return {
         **summary,
-        "paystack_public_key": settings.paystack_test_public_key,
+        "paystack_public_key": settings.paystack_public_key,
         "note": (
             "Paystack powers card payment testing. "
             "Demo Day judges see Hubtel-integrated MoMo + Paystack card (provider-agnostic architecture)."
@@ -70,7 +70,9 @@ async def create_contribution(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """Initiate contribution. Creates pending record + calls MoMo API."""
+    """Initiate contribution. Creates pending record + calls the active provider."""
+    if request.method == "momo" and not (request.payer_phone or current_user.phone):
+        raise HTTPException(status_code=400, detail="A MoMo phone number is required for MoMo contributions")
     # Verify user is group member
     member_check = await db.execute(
         select(GroupMember).where(

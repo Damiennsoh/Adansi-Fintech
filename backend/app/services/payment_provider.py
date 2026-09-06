@@ -77,15 +77,14 @@ async def process_contribution(data: Dict[str, Any]) -> Dict[str, Any]:
                 callback_url=data.get("callback_url"),
                 metadata=data.get("metadata"),
             )
-        # MoMo via Paystack: Paystack supports GH MoMo via channels=['mobile_money']
-        return await paystack_client.receive_money(
+        # Paystack test mode is used for card checkout only. MoMo routes through
+        # Hubtel when enabled, or the local sandbox during development.
+        return await momo_service.request_payment(
+            phone=data.get("payer_phone", ""),
             amount=Decimal(str(data["amount"])),
-            email=data.get("payer_email") or f"{data.get('payer_phone','guest')}@adansi.app",
-            description=data.get("description"),
-            reference=data.get("reference"),
+            description=data.get("description", "ADANSI contribution"),
             callback_url=data.get("callback_url"),
-            metadata=data.get("metadata"),
-            channels=["mobile_money", "card"],
+            network=data.get("network", "mtn"),
         )
 
     if provider == "hubtel":

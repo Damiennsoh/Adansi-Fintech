@@ -22,8 +22,8 @@ class PaystackClient:
 
     def __init__(self):
         self.base_url = settings.paystack_base_url.rstrip("/")
-        self.secret_key = settings.paystack_test_secret_key
-        self.public_key = settings.paystack_test_public_key
+        self.secret_key = settings.paystack_secret_key
+        self.public_key = settings.paystack_public_key
 
     @property
     def is_configured(self) -> bool:
