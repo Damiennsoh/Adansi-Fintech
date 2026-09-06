@@ -43,6 +43,7 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
     token = credentials.credentials
     payload = None
     user_id = None
+    auth_email = None
 
     print(f"Auth middleware: Attempting to verify token")
 
@@ -53,6 +54,7 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
         if supabase_result.get("success"):
             auth_user = supabase_result.get("user")
             user_id = getattr(auth_user, "id", None)
+            auth_email = getattr(auth_user, "email", None)
             print(f"Auth middleware: Supabase Auth success, user_id: {user_id}")
         else:
             print(f"Auth middleware: Supabase Auth validation failed: {supabase_result.get('error')}")
@@ -98,6 +100,16 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
             )
             user = result.scalar_one_or_none()
             print(f"Auth middleware: User found by id: {user is not None}")
+
+        if not user and auth_email:
+            result = await session.execute(
+                select(User).where(User.email == auth_email.lower())
+            )
+            user = result.scalar_one_or_none()
+            if user and uuid_user_id is not None and user.auth_user_id != uuid_user_id:
+                user.auth_user_id = uuid_user_id
+                await session.commit()
+            print(f"Auth middleware: User found by email fallback: {user is not None}")
 
         if not user and phone_user_id:
             result = await session.execute(

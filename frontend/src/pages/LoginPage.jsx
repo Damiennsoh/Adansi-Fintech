@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
-import { Phone, Mail, Loader2, UserRound, LockKeyhole } from 'lucide-react'
+import { Phone, Mail, Loader2, UserRound, LockKeyhole, Eye, EyeOff } from 'lucide-react'
 import api from '../lib/api'
 
 export default function LoginPage() {
@@ -13,6 +13,8 @@ export default function LoginPage() {
   const [fullName, setFullName] = useState('')
   const [pin, setPin] = useState('')
   const [password, setPassword] = useState('')
+  const [showPin, setShowPin] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
   const { sendOTP, loginWithPIN } = useAuth()
   const navigate = useNavigate()
 
@@ -165,15 +167,21 @@ export default function LoginPage() {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">Enter your PIN</label>
-                  <input
-                    type="password"
-                    inputMode="numeric"
-                    maxLength={6}
-                    value={pin}
-                    onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                    placeholder="••••••"
-                    className="w-full px-4 py-4 bg-white/10 border border-white/20 rounded-xl text-white text-center text-2xl tracking-[0.5em] placeholder-gray-600 focus:outline-none focus:border-adansi-primary"
-                  />
+                  <div className="relative">
+                    <input
+                      type={showPin ? 'text' : 'password'}
+                      inputMode="numeric"
+                      maxLength={6}
+                      value={pin}
+                      onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                      placeholder="••••••"
+                      aria-label="PIN"
+                      className="w-full px-4 pr-12 py-4 bg-white/10 border border-white/20 rounded-xl text-white text-center text-2xl tracking-[0.5em] placeholder-gray-600 focus:outline-none focus:border-adansi-primary"
+                    />
+                    <button type="button" onClick={() => setShowPin(!showPin)} aria-label={showPin ? 'Hide PIN' : 'Show PIN'} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white">
+                      {showPin ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                    </button>
+                  </div>
                 </div>
 
                 <button
@@ -255,14 +263,20 @@ export default function LoginPage() {
                 <label className="block text-sm font-medium text-gray-300 mb-2">Password</label>
                 <div className="relative">
                   <LockKeyhole className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
-                  <input
-                    type="password"
-                    minLength={6}
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="At least 6 characters"
-                    className="w-full pl-12 pr-4 py-4 bg-white/10 border border-white/20 rounded-xl text-white text-center tracking-[0.4em] placeholder-gray-500 focus:outline-none focus:border-adansi-primary"
-                  />
+                  <div className="relative">
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      minLength={6}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="At least 6 characters"
+                      aria-label="Password"
+                      className="w-full pl-12 pr-12 py-4 bg-white/10 border border-white/20 rounded-xl text-white text-center tracking-[0.4em] placeholder-gray-500 focus:outline-none focus:border-adansi-primary"
+                    />
+                    <button type="button" onClick={() => setShowPassword(!showPassword)} aria-label={showPassword ? 'Hide password' : 'Show password'} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white">
+                      {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                    </button>
+                  </div>
                 </div>
               </div>
 
