@@ -15,7 +15,7 @@ from app.schemas.group import (
     GroupCreateRequest, GroupResponse, GroupListResponse,
     JoinGroupRequest, InviteMemberRequest
 )
-from app.models import Group, GroupMember, User, Contribution, AuditEvent, JoinRequest
+from app.models import Group, GroupMember, User, Contribution, Withdrawal, AuditEvent, JoinRequest
 
 router = APIRouter(prefix="/groups", tags=["Groups"])
 
@@ -168,15 +168,63 @@ async def get_group_audit(group_id: UUID, current_user: User = Depends(get_curre
 
 @router.get("/{group_id}/ledger")
 async def get_group_ledger(group_id: UUID, current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    """Return the complete group ledger, not just the current member's history."""
+    """Return the complete group ledger (contributions + withdrawals), not just the current member's history."""
     membership = await db.scalar(select(GroupMember).where(GroupMember.group_id == group_id, GroupMember.user_id == current_user.id, GroupMember.archived_at.is_(None)))
     if not membership:
         raise HTTPException(status_code=403, detail="Not an active member")
     group = await db.get(Group, group_id)
     if not group:
         raise HTTPException(status_code=404, detail="Group not found")
+    
+    # Get completed contributions
     contributions = (await db.execute(select(Contribution).where(Contribution.group_id == group_id, Contribution.status == "completed").order_by(Contribution.created_at.desc()))).scalars().all()
-    return {"group": {"id": str(group.id), "name": group.name, "code": group.code, "type": group.type, "balance": float(group.current_balance or 0), "target_amount": float(group.target_amount or 0)}, "entries": [{"id": str(c.id), "type": "contribution", "amount": float(c.amount), "status": c.status, "method": c.method, "reference": c.transaction_ref, "created_at": c.created_at, "member_name": c.user.full_name if c.user else "Member"} for c in contributions]}
+    
+    # Get completed withdrawals
+    withdrawals = (await db.execute(select(Withdrawal).where(Withdrawal.group_id == group_id, Withdrawal.status == "disbursed").order_by(Withdrawal.created_at.desc()))).scalars().all()
+    
+    # Combine and sort by date
+    entries = []
+    for c in contributions:
+        entries.append({
+            "id": str(c.id),
+            "type": "contribution",
+            "amount": float(c.amount),
+            "status": c.status,
+            "method": c.method,
+            "reference": c.transaction_ref,
+            "created_at": c.created_at,
+            "member_name": c.user.full_name if c.user else "Member",
+            "contribution_frequency": c.meta_data.get("contribution_frequency") if c.meta_data else None
+        })
+    
+    for w in withdrawals:
+        entries.append({
+            "id": str(w.id),
+            "type": "withdrawal",
+            "amount": float(w.amount),
+            "status": w.status,
+            "method": w.disbursement_method or "momo",
+            "reference": w.momo_disbursement_ref or f"WITH-{w.id.hex[:8].upper()}",
+            "created_at": w.disbursed_at or w.created_at,
+            "member_name": w.requester.full_name if w.requester else "Member",
+            "beneficiary_name": w.beneficiary_name,
+            "beneficiary_phone": w.beneficiary_phone
+        })
+    
+    # Sort by created_at descending
+    entries.sort(key=lambda x: x["created_at"], reverse=True)
+    
+    return {
+        "group": {
+            "id": str(group.id),
+            "name": group.name,
+            "code": group.code,
+            "type": group.type,
+            "balance": float(group.current_balance or 0),
+            "target_amount": float(group.target_amount or 0)
+        },
+        "entries": entries
+    }
 
 
 @router.get("/{group_id}/ledger.pdf")
