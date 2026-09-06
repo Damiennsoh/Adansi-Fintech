@@ -45,8 +45,8 @@ class Settings(BaseSettings):
     hubtel_base_url: str = Field(default="https://api.hubtel.com/v1", alias="HUBTEL_BASE_URL")
 
     # Paystack (test mode for card/demo payments)
-    paystack_test_public_key: str | None = Field(default=None, alias="PAYSTACK_TEST_PUBLIC_KEY")
-    paystack_test_secret_key: str | None = Field(default=None, alias="PAYSTACK_TEST_SECRET_KEY")
+    paystack_public_key: str | None = Field(default=None, alias="PAYSTACK_PUBLIC_KEY")
+    paystack_secret_key: str | None = Field(default=None, alias="PAYSTACK_SECRET_KEY")
     paystack_base_url: str = Field(default="https://api.paystack.co", alias="PAYSTACK_BASE_URL")
 
     # Twilio (optional until WhatsApp/SMS is enabled)
