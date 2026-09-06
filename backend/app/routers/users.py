@@ -15,8 +15,19 @@ router = APIRouter(prefix="/users", tags=["Users"])
 
 @router.get("/me", response_model=UserProfileResponse)
 async def get_my_profile(current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    """Get current user profile."""
-    return current_user
+    """Get current user profile for either phone or email authentication."""
+    return {
+        "id": current_user.id,
+        "phone": current_user.phone,
+        "email": current_user.email,
+        "full_name": current_user.full_name,
+        "ghana_card_number": current_user.ghana_card_number,
+        "is_verified": current_user.is_verified,
+        "credit_score": current_user.credit_score,
+        "total_contributed": current_user.total_contributed,
+        "groups_count": current_user.groups_count,
+        "created_at": current_user.created_at,
+    }
 
 
 @router.put("/me")

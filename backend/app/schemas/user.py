@@ -10,7 +10,8 @@ class UserProfileResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID
-    phone: str
+    phone: Optional[str] = None
+    email: Optional[str] = None
     full_name: str
     ghana_card_number: Optional[str] = None
     is_verified: bool
