@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useContributions } from '../hooks/useContributions'
 import { useAuthStore } from '../store/authStore'
@@ -36,6 +36,7 @@ export default function ContributePage() {
   const { user } = useAuthStore()
   const { contribute } = useContributions()
   const [amount, setAmount] = useState('')
+  const [payerPhone, setPayerPhone] = useState(user?.phone || '')
   const [network, setNetwork] = useState(detectNetworkFromPhone(user?.phone || ''))
   const [showUSSD, setShowUSSD] = useState(false)
   const [method, setMethod] = useState(user?.email && !user?.phone ? 'card' : 'momo')
@@ -43,7 +44,13 @@ export default function ContributePage() {
   const [lastError, setLastError] = useState(null)
 
   const payerEmail = user?.email || `${(user?.id || 'user').slice(0, 8)}@adansi.app`
-  const publicKey = import.meta.env.VITE_PAYSTACK_PUBLIC_KEY || 'pk_test_a1edd4233cb500a8b10d38357b594ced33e9c557'
+  const [providerInfo, setProviderInfo] = useState(null)
+
+  useEffect(() => {
+    api.get('/contributions/provider/info').then(({ data }) => setProviderInfo(data)).catch(() => {})
+  }, [])
+
+  const publicKey = providerInfo?.paystack_public_key || import.meta.env.VITE_PAYSTACK_PUBLIC_KEY || ''
 
   const openPaystackInline = async (init) => {
     const loaded = await loadPaystackSDK()
@@ -132,7 +139,7 @@ export default function ContributePage() {
         await openPaystackInline(init)
         return
       }
-      await contribute.mutateAsync({ groupId: id, amount: parseFloat(amount), network })
+      await contribute.mutateAsync({ groupId: id, amount: parseFloat(amount), network, payerPhone })
       setStep('success')
       setTimeout(() => navigate(`/groups/${id}`), 2000)
     } catch (err) {
@@ -258,7 +265,21 @@ export default function ContributePage() {
           </button>
         </div>
 
-        {method === 'momo' && <NetworkSelector value={network} onChange={setNetwork} />}
+        {method === 'momo' && (
+          <div className="space-y-3">
+            <label className="block text-sm font-medium text-gray-700" htmlFor="contribution-phone">MoMo phone number</label>
+            <input
+              id="contribution-phone"
+              type="tel"
+              value={payerPhone}
+              onChange={(e) => { setPayerPhone(e.target.value); setNetwork(detectNetworkFromPhone(e.target.value)) }}
+              placeholder="e.g. 024 000 0000"
+              autoComplete="tel"
+              className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl text-gray-900 focus:outline-none focus:border-adansi-primary"
+            />
+            <NetworkSelector value={network} onChange={setNetwork} />
+          </div>
+        )}
 
         {method === 'card' ? (
           <div className="bg-blue-50 rounded-xl p-4 flex items-start gap-3">

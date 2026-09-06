@@ -79,7 +79,7 @@ export default function DiasporaPage() {
   const publicKey =
     providerInfo?.paystack_public_key ||
     import.meta.env.VITE_PAYSTACK_PUBLIC_KEY ||
-    'pk_test_a1edd4233cb500a8b10d38357b594ced33e9c557'
+    ''
 
   const handleSearch = async () => {
     const query = searchCode.trim()
