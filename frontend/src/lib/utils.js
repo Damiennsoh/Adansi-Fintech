@@ -48,16 +48,17 @@ export function formatGroupType(type) {
 
 export function getGroupColor(type) {
   const colors = {
-    funeral: 'bg-adansi-funeral',
-    wedding: 'bg-adansi-wedding',
-    health: 'bg-adansi-health',
-    savings: 'bg-adansi-savings',
-    investment: 'bg-adansi-investment',
-    business: 'bg-emerald-700',
-    susu: 'bg-adansi-savings',
-    welfare: 'bg-purple-700',
+    wedding: 'bg-gradient-to-br from-rose-950 via-pink-950 to-slate-900',
+    funeral: 'bg-gradient-to-br from-indigo-950 via-purple-950 to-slate-900',
+    health: 'bg-gradient-to-br from-teal-950 via-emerald-950 to-slate-900',
+    savings: 'bg-gradient-to-br from-blue-950 via-indigo-950 to-slate-900',
+    susu: 'bg-gradient-to-br from-sky-950 via-blue-950 to-slate-900',
+    investment: 'bg-gradient-to-br from-amber-950 via-stone-900 to-slate-950',
+    business: 'bg-gradient-to-br from-emerald-950 via-teal-950 to-slate-900',
+    welfare: 'bg-gradient-to-br from-purple-950 via-violet-950 to-slate-900',
+    school: 'bg-gradient-to-br from-indigo-950 via-blue-950 to-slate-900',
   };
-  return colors[type] || 'bg-gray-500';
+  return colors[type] || 'bg-gradient-to-br from-slate-900 via-gray-900 to-slate-950';
 }
 
 export function getCreditTier(score) {

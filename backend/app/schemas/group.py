@@ -70,6 +70,46 @@ class GroupCreateRequest(BaseModel):
         return self.contribution_frequency or self.frequency
 
 
+class GroupUpdateRequest(BaseModel):
+    name: Optional[str] = Field(None, min_length=3, max_length=150)
+    type: Optional[str] = Field(None)
+    purpose: Optional[str] = Field(None, max_length=500)
+    target_amount: Optional[Decimal] = Field(None, ge=0)
+    contribution_amount: Optional[Decimal] = Field(None, ge=0)
+    contribution_frequency: Optional[str] = Field(None)
+    approval_rule: Optional[str] = Field(None)
+    auto_approve_limit: Optional[Decimal] = Field(None, ge=0)
+
+    @field_validator("type")
+    @classmethod
+    def validate_type(cls, v):
+        if v is None:
+            return v
+        normalized = v.strip().lower()
+        if normalized in VALID_GROUP_TYPES:
+            return normalized
+        if len(normalized) < 3 or len(normalized) > 30:
+            raise ValueError("custom group type must be between 3 and 30 characters")
+        return normalized
+
+    @field_validator("approval_rule")
+    @classmethod
+    def validate_approval_rule(cls, v):
+        if v is None:
+            return v
+        mapping = {"2_of_3": "two_of_three_treasurers", "majority": "majority_members", "unanimous": "unanimous_members"}
+        return mapping.get(v, v)
+
+    @field_validator("contribution_frequency")
+    @classmethod
+    def validate_frequency(cls, v):
+        if v is None:
+            return v
+        if v == "one_time":
+            return "adhoc"
+        if v not in VALID_FREQUENCIES:
+            raise ValueError(f"frequency must be one of: {', '.join(sorted(VALID_FREQUENCIES))}")
+        return v
 
 
 class GroupMemberResponse(BaseModel):

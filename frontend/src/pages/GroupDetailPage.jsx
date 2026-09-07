@@ -1,13 +1,14 @@
 import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
-import { ArrowLeft, Users, Copy, Share2, Phone, Wallet, ArrowUpRight, ArrowDownLeft, Clock, CheckCircle2, FileDown, Archive, RotateCcw, Loader2 } from 'lucide-react'
+import { ArrowLeft, Users, Copy, Share2, Phone, Wallet, ArrowUpRight, ArrowDownLeft, Clock, CheckCircle2, FileDown, Archive, RotateCcw, Loader2, Settings } from 'lucide-react'
 import { useGroupDetail } from '../hooks/useGroups'
 import { useWithdrawals } from '../hooks/useContributions'
 import { useRealtimeContributions } from '../hooks/useRealtime'
 import { formatCurrency, formatGroupType, formatRelativeTime, getGroupColor } from '../lib/utils'
 import api from '../lib/api'
 import USSDModal from '../components/USSDModal'
+import GroupSettingsModal from '../components/GroupSettingsModal'
 import { useAuthStore } from '../store/authStore'
 
 function ruleLabel(rule) {
@@ -20,6 +21,7 @@ function ruleLabel(rule) {
 export default function GroupDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const [searchParams] = useSearchParams()
   const initialTab = searchParams.get('tab') || 'activity'
   const { user } = useAuthStore()
@@ -40,6 +42,7 @@ export default function GroupDetailPage() {
   const { approveWithdrawal } = useWithdrawals()
   const [activeTab, setActiveTab] = useState(initialTab)
   const [showUSSD, setShowUSSD] = useState(false)
+  const [showSettingsModal, setShowSettingsModal] = useState(false)
   const [copied, setCopied] = useState(false)
   const [isExporting, setIsExporting] = useState(false)
 
@@ -90,13 +93,13 @@ export default function GroupDetailPage() {
   }
 
   const shareGroup = () => {
-    const publicUrl = `${window.location.origin}/g/${group?.code}?name=${encodeURIComponent(group?.name || '')}`
-    const text = `Contribute to ${group?.name} (${group?.code}) on Adansi. No account needed: ${publicUrl}`
+    const origin = window.location.origin
+    const publicUrl = `${origin}/g/${group?.code || id}`
 
     if (navigator.share) {
       navigator.share({
-        title: `${group?.name} guest contribution link`,
-        text,
+        title: `Contribute to ${group.name}`,
+        text: `Support ${group.name} on ADANSI using code ${group.code}`,
         url: publicUrl,
       }).catch(() => {
         navigator.clipboard.writeText(publicUrl)
@@ -163,52 +166,63 @@ export default function GroupDetailPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 pb-24">
-      <div className={`${colorClass} px-5 pt-8 pb-6 text-white`}>
+      <div className={`${colorClass} px-5 pt-8 pb-6 text-white shadow-md`}>
         <div className="flex items-center gap-3 mb-4">
           <button onClick={() => navigate('/groups')} className="p-2 bg-white/20 rounded-full hover:bg-white/30 transition-colors">
-            <ArrowLeft className="w-5 h-5" />
+            <ArrowLeft className="w-5 h-5 text-white" />
           </button>
-          <h1 className="text-xl font-bold flex-1 truncate">{group.name}</h1>
+          <h1 className="text-xl font-bold flex-1 truncate text-white">{group.name}</h1>
+          {canManageRoles && (
+            <button
+              onClick={() => setShowSettingsModal(true)}
+              className="p-2 bg-white/20 rounded-full hover:bg-white/30 transition-colors"
+              title="Edit Group Settings"
+            >
+              <Settings className="w-5 h-5 text-white" />
+            </button>
+          )}
         </div>
 
         <div className="text-center mb-4">
           <p className="text-white/70 text-sm">Group Balance</p>
-          <p className="text-2xl sm:text-4xl font-bold break-words">{formatCurrency(balance)}</p>
+          <p className="text-3xl sm:text-4xl font-extrabold tracking-tight break-words text-white drop-shadow-sm">{formatCurrency(balance)}</p>
         </div>
 
-        <div className="flex flex-col sm:flex-row sm:flex-wrap items-center justify-center gap-1 bg-black/20 text-adansi-primary text-xs px-3 py-2 rounded-xl w-full max-w-sm mx-auto mb-3 font-medium border border-adansi-primary/30 text-center">
-          <span>Approval: {ruleLabel(group.approval_rule)}</span>
-          <span className="hidden sm:inline">•</span>
-          <span>Auto-approve: {formatCurrency(group.auto_approve_limit || 0)}</span>
+        <div className="flex flex-col sm:flex-row sm:flex-wrap items-center justify-center gap-1.5 bg-white/10 text-white text-xs px-3.5 py-1.5 rounded-full w-full max-w-sm mx-auto mb-4 font-medium border border-white/20 text-center shadow-sm backdrop-blur-sm">
+          <span className="font-semibold text-adansi-primary">Approval:</span>
+          <span>{ruleLabel(group.approval_rule)}</span>
+          <span className="hidden sm:inline text-white/40">•</span>
+          <span className="font-semibold text-adansi-primary">Auto-approve:</span>
+          <span>{formatCurrency(group.auto_approve_limit || 0)}</span>
         </div>
 
-        <div className="mx-auto grid w-full max-w-sm grid-cols-2 gap-x-4 gap-y-2 text-left text-sm text-white/80">
-          <span className="flex min-w-0 items-center gap-2"><Users className="h-4 w-4 shrink-0" /><span className="truncate">{activeMembers.length} active members</span></span>
-          <span className="truncate">Type: {formatGroupType(group.type)}</span>
-          <span className="truncate">Frequency: {group.contribution_frequency || 'adhoc'}</span>
-          {group.target_amount ? <span className="truncate">Target: {formatCurrency(group.target_amount)}</span> : null}
-          {group.contribution_amount ? <span className="truncate">Per contribution: {formatCurrency(group.contribution_amount)}</span> : null}
+        <div className="mx-auto grid w-full max-w-sm grid-cols-2 gap-x-4 gap-y-2 text-left text-xs sm:text-sm text-white/90">
+          <span className="flex min-w-0 items-center gap-1.5"><Users className="h-4 w-4 shrink-0 text-adansi-primary" /><span className="truncate">{activeMembers.length} active members</span></span>
+          <span className="truncate"><span className="text-white/60">Type:</span> <span className="font-semibold">{formatGroupType(group.type)}</span></span>
+          <span className="truncate"><span className="text-white/60">Frequency:</span> <span className="font-semibold capitalize">{group.contribution_frequency || 'adhoc'}</span></span>
+          {group.target_amount ? <span className="truncate"><span className="text-white/60">Target:</span> <span className="font-semibold">{formatCurrency(group.target_amount)}</span></span> : null}
+          {group.contribution_amount ? <span className="truncate"><span className="text-white/60">Per person:</span> <span className="font-semibold">{formatCurrency(group.contribution_amount)}</span></span> : null}
         </div>
 
-        <div className="mt-4 bg-white/20 rounded-xl p-3 space-y-3">
+        <div className="mt-4 bg-white/15 backdrop-blur-md rounded-2xl p-3.5 space-y-3 border border-white/20">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-xs text-white/70">Join Code</p>
-              <p className="font-mono font-bold text-lg tracking-wider">{group.code}</p>
+              <p className="font-mono font-bold text-lg tracking-wider text-white">{group.code}</p>
             </div>
             <button onClick={copyCode} className="p-2 bg-white/20 rounded-lg hover:bg-white/30 transition-colors">
-              {copied ? <CheckCircle2 className="w-5 h-5" /> : <Copy className="w-5 h-5" />}
+              {copied ? <CheckCircle2 className="w-5 h-5 text-green-300" /> : <Copy className="w-5 h-5 text-white" />}
             </button>
           </div>
 
           <button
             onClick={shareGroup}
-            className="w-full flex items-center justify-center gap-2 bg-white/15 border border-white/20 text-white font-semibold py-2.5 rounded-xl text-sm hover:bg-white/25 transition-colors"
+            className="w-full flex items-center justify-center gap-2 bg-white/20 border border-white/30 text-white font-semibold py-2.5 rounded-xl text-sm hover:bg-white/30 transition-colors shadow-sm"
           >
             <Share2 className="w-4 h-4" />
             Share guest contribution link
           </button>
-          <p className="text-center text-xs leading-5 text-white/70">Send this link to people who want to contribute without creating an account.</p>
+          <p className="text-center text-xs leading-5 text-white/75">Send this link to people who want to contribute without creating an account.</p>
         </div>
       </div>
 
@@ -655,7 +669,17 @@ export default function GroupDetailPage() {
       </div>
 
       <USSDModal isOpen={showUSSD} onClose={() => setShowUSSD(false)} groupCode={group.code} />
+      <GroupSettingsModal
+        isOpen={showSettingsModal}
+        onClose={() => setShowSettingsModal(false)}
+        group={group}
+        onSaved={() => {
+          queryClient.invalidateQueries({ queryKey: ['group', id] })
+          queryClient.invalidateQueries({ queryKey: ['groups'] })
+        }}
+      />
     </div>
   )
 }
+
 

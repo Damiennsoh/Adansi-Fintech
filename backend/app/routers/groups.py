@@ -12,7 +12,7 @@ from app.middleware.auth import get_current_user
 from app.services.group_service import group_service
 from app.services.notification_service import notification_service
 from app.schemas.group import (
-    GroupCreateRequest, GroupResponse, GroupListResponse,
+    GroupCreateRequest, GroupUpdateRequest, GroupResponse, GroupListResponse,
     JoinGroupRequest, InviteMemberRequest
 )
 from app.models import Group, GroupMember, User, Contribution, Withdrawal, AuditEvent, JoinRequest
@@ -43,7 +43,80 @@ async def create_group(
         join_type=request.join_type or "approval_required",
         rotation_enabled=request.rotation_enabled,
         rotation_queue=request.rotation_queue,
-    )
+    return group
+
+
+@router.put("/{group_id}", response_model=GroupResponse)
+async def update_group(
+    group_id: UUID,
+    request: GroupUpdateRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Update group settings (admin or group creator only)."""
+    try:
+        admin_check = await db.scalar(
+            select(GroupMember).where(
+                GroupMember.group_id == group_id,
+                GroupMember.user_id == current_user.id,
+                GroupMember.role.in_(["admin", "treasurer"]),
+                GroupMember.archived_at.is_(None)
+            )
+        )
+    except Exception:
+        admin_check = await db.scalar(
+            select(GroupMember).where(
+                GroupMember.group_id == group_id,
+                GroupMember.user_id == current_user.id,
+                GroupMember.role.in_(["admin", "treasurer"])
+            )
+        )
+
+    group = await db.get(Group, group_id)
+    if not group:
+        raise HTTPException(status_code=404, detail="Group not found")
+
+    if not admin_check and group.created_by != current_user.id:
+        raise HTTPException(status_code=403, detail="Only group admins can modify group settings")
+
+    changes = {}
+    if request.name is not None and request.name != group.name:
+        changes["name"] = request.name
+        group.name = request.name
+    if request.type is not None and request.type != group.type:
+        changes["type"] = request.type
+        group.type = request.type
+    if request.purpose is not None and request.purpose != group.purpose:
+        changes["purpose"] = request.purpose
+        group.purpose = request.purpose
+    if request.target_amount is not None:
+        changes["target_amount"] = float(request.target_amount)
+        group.target_amount = request.target_amount
+    if request.contribution_amount is not None:
+        changes["contribution_amount"] = float(request.contribution_amount)
+        group.contribution_amount = request.contribution_amount
+    if request.contribution_frequency is not None:
+        changes["contribution_frequency"] = request.contribution_frequency
+        group.contribution_frequency = request.contribution_frequency
+    if request.approval_rule is not None:
+        changes["approval_rule"] = request.approval_rule
+        group.approval_rule = request.approval_rule
+    if request.auto_approve_limit is not None:
+        changes["auto_approve_limit"] = float(request.auto_approve_limit)
+        group.auto_approve_limit = request.auto_approve_limit
+
+    if changes:
+        db.add(AuditEvent(
+            group_id=group_id,
+            actor_id=current_user.id,
+            event_type="group_settings_updated",
+            entity_type="group",
+            entity_id=group.id,
+            event_metadata={"changes": changes}
+        ))
+        await db.commit()
+        await db.refresh(group)
+
     return group
 
 
