@@ -70,9 +70,20 @@ _USERS_PATCHES = [
     ("updated_at", "TIMESTAMPTZ NOT NULL DEFAULT NOW()"),
 ]
 
+# Additional table patches: (table_name, column_name, column_def)
+_EXTRA_TABLE_PATCHES = [
+    ("group_members", "archived_at", "TIMESTAMPTZ NULL"),
+    ("contributions", "metadata", "JSON NULL"),
+    ("withdrawals", "beneficiary_name", "VARCHAR(255) NULL"),
+    ("withdrawals", "beneficiary_phone", "VARCHAR(15) NULL"),
+    ("withdrawals", "beneficiary_network", "VARCHAR(20) DEFAULT 'mtn'"),
+    ("withdrawals", "disbursement_method", "VARCHAR(20) DEFAULT 'momo'"),
+    ("withdrawals", "beneficiary_bank_account", "VARCHAR(50) NULL"),
+    ("withdrawals", "momo_disbursement_ref", "VARCHAR(100) NULL"),
+    ("withdrawals", "disbursed_at", "TIMESTAMPTZ NULL"),
+]
+
 # Columns that must also be checked for NULLABLE even when they always exist
-# (e.g. "phone" was created NOT NULL in the initial bootstrap but the User
-#  Python model declares it nullable to support diaspora email-only signups).
 _USERS_EXPECTED_NULLABLE = ["phone", "email", "ghana_card_number",
                             "ghana_card_image_url", "pin_hash", "auth_user_id"]
 
@@ -89,7 +100,7 @@ def _nullability_from_def(col_def: str) -> bool:
 
 
 async def patch_users_table() -> dict:
-    """Ensure every column the `User` model declares exists in the deployed DB.
+    """Ensure every column the `User` and `GroupMember` models declare exists in the deployed DB.
 
     Returns a dict with `applied: list[str]` naming the DDL statements that
     actually ran (not the no-ops) so startup logs prove which columns were added.
@@ -105,7 +116,7 @@ async def patch_users_table() -> dict:
             skipped.append("users table does not exist yet; Base.metadata.create_all will create it fully")
             return {"applied": applied, "skipped": skipped}
 
-        # ---- (1) Add missing columns ------------------------------------------------
+        # ---- (1) Add missing columns to users ---------------------------------------
         for col_name, col_def in _USERS_PATCHES:
             check = await conn.execute(text(
                 "SELECT 1 FROM information_schema.columns "
@@ -117,8 +128,27 @@ async def patch_users_table() -> dict:
             await conn.execute(text(ddl))
             applied.append(ddl)
 
+        # ---- (1b) Add missing columns to other tables ------------------------------
+        for tbl_name, col_name, col_def in _EXTRA_TABLE_PATCHES:
+            tbl_check = await conn.execute(text(
+                "SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema='public' AND table_name=:t)"
+            ), {"t": tbl_name})
+            if not tbl_check.scalar():
+                continue
+            check = await conn.execute(text(
+                "SELECT 1 FROM information_schema.columns "
+                "WHERE table_schema='public' AND table_name=:t AND column_name=:c"
+            ), {"t": tbl_name, "c": col_name})
+            if check.fetchone():
+                continue
+            ddl = f'ALTER TABLE {tbl_name} ADD COLUMN "{col_name}" {col_def}'
+            try:
+                await conn.execute(text(ddl))
+                applied.append(ddl)
+            except Exception as exc:
+                skipped.append(f"{ddl} -- failed: {exc}")
+
         # ---- (2) Fix nullability for columns that already exist but are NOT NULL ---
-        # Build a map of {column_name: expected_nullable}.
         expected_nullable = {
             col: _nullability_from_def(defn)
             for col, defn in _USERS_PATCHES

@@ -166,10 +166,23 @@ async def get_group_audit(group_id: UUID, current_user: User = Depends(get_curre
     result = await db.execute(select(AuditEvent, User.full_name.label("actor_name")).outerjoin(User, AuditEvent.actor_id == User.id).where(AuditEvent.group_id == group_id).order_by(AuditEvent.created_at.desc()).limit(100))
     return {"events": [{"id": str(e.id), "event_type": e.event_type, "entity_type": e.entity_type, "entity_id": str(e.entity_id) if e.entity_id else None, "amount": float(e.amount) if e.amount is not None else None, "metadata": e.event_metadata, "actor_id": str(e.actor_id) if e.actor_id else None, "actor_name": actor_name or "System", "created_at": e.created_at} for e, actor_name in result.all()]}
 
+def _normalize_dt(dt):
+    from datetime import datetime, timezone
+    if not dt:
+        return datetime.min.replace(tzinfo=timezone.utc)
+    if isinstance(dt, datetime) and dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt
+
+
 @router.get("/{group_id}/ledger")
 async def get_group_ledger(group_id: UUID, current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """Return the complete group ledger (contributions + withdrawals), not just the current member's history."""
-    membership = await db.scalar(select(GroupMember).where(GroupMember.group_id == group_id, GroupMember.user_id == current_user.id, GroupMember.archived_at.is_(None)))
+    try:
+        membership = await db.scalar(select(GroupMember).where(GroupMember.group_id == group_id, GroupMember.user_id == current_user.id, GroupMember.archived_at.is_(None)))
+    except Exception:
+        membership = await db.scalar(select(GroupMember).where(GroupMember.group_id == group_id, GroupMember.user_id == current_user.id))
+
     if not membership:
         raise HTTPException(status_code=403, detail="Not an active member")
     group = await db.get(Group, group_id)
@@ -184,34 +197,35 @@ async def get_group_ledger(group_id: UUID, current_user: User = Depends(get_curr
         .order_by(Contribution.created_at.desc())
     )).scalars().all()
     
-    # Get completed withdrawals with eager-loaded requester relationship
+    # Get completed/disbursed withdrawals with eager-loaded requester relationship
     withdrawals = (await db.execute(
         select(Withdrawal)
         .options(selectinload(Withdrawal.requester))
-        .where(Withdrawal.group_id == group_id, Withdrawal.status == "disbursed")
+        .where(Withdrawal.group_id == group_id, Withdrawal.status.in_(["disbursed", "completed", "approved"]))
         .order_by(Withdrawal.created_at.desc())
     )).scalars().all()
     
-    # Combine and sort by date
+    # Combine and sort by date safely
     entries = []
     for c in contributions:
         m_name = (c.user.full_name if c.user and c.user.full_name else None)
-        if not m_name and c.meta_data:
-            m_name = c.meta_data.get("contributor_name") or c.meta_data.get("sender_name") or c.meta_data.get("payer_name")
+        meta = c.meta_data if isinstance(c.meta_data, dict) else {}
+        if not m_name and meta:
+            m_name = meta.get("contributor_name") or meta.get("sender_name") or meta.get("payer_name")
         if not m_name:
             m_name = "Member"
 
         entries.append({
             "id": str(c.id),
             "type": "contribution",
-            "amount": float(c.amount),
+            "amount": float(c.amount or 0),
             "status": c.status,
-            "method": c.method,
-            "reference": c.transaction_ref,
+            "method": c.method or "momo",
+            "reference": c.transaction_ref or f"CONT-{str(c.id)[:8]}",
             "created_at": c.created_at,
             "member_name": m_name,
-            "is_guest": bool(c.meta_data.get("guest")) if c.meta_data else False,
-            "contribution_frequency": c.meta_data.get("contribution_frequency") if c.meta_data else None
+            "is_guest": bool(meta.get("guest")) if meta else False,
+            "contribution_frequency": meta.get("contribution_frequency") if meta else None
         })
     
     for w in withdrawals:
@@ -219,19 +233,19 @@ async def get_group_ledger(group_id: UUID, current_user: User = Depends(get_curr
         entries.append({
             "id": str(w.id),
             "type": "withdrawal",
-            "amount": float(w.amount),
+            "amount": float(w.amount or 0),
             "status": w.status,
             "method": w.disbursement_method or "momo",
             "reference": w.momo_disbursement_ref or f"WITH-{w.id.hex[:8].upper()}",
             "created_at": w.disbursed_at or w.created_at,
             "member_name": req_name,
             "requester_name": req_name,
-            "beneficiary_name": w.beneficiary_name,
+            "beneficiary_name": w.beneficiary_name or req_name,
             "beneficiary_phone": w.beneficiary_phone
         })
     
-    # Sort by created_at descending
-    entries.sort(key=lambda x: x["created_at"], reverse=True)
+    # Sort by created_at descending with normalized timezone
+    entries.sort(key=lambda x: _normalize_dt(x["created_at"]), reverse=True)
     
     return {
         "group": {
@@ -250,45 +264,161 @@ async def get_group_ledger(group_id: UUID, current_user: User = Depends(get_curr
 async def export_group_ledger_pdf(group_id: UUID, current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """Generate a downloadable financial statement for group admins and treasurers."""
     from io import BytesIO
+    from datetime import datetime
     from fastapi.responses import StreamingResponse
     from reportlab.lib.pagesizes import A4
     from reportlab.pdfgen import canvas
-    member = await db.scalar(
-        select(GroupMember).where(
-            GroupMember.group_id == group_id,
-            GroupMember.user_id == current_user.id,
-            GroupMember.role.in_(["admin", "treasurer"]),
-            GroupMember.archived_at.is_(None)
+    from reportlab.lib import colors
+    
+    try:
+        member = await db.scalar(
+            select(GroupMember).where(
+                GroupMember.group_id == group_id,
+                GroupMember.user_id == current_user.id,
+                GroupMember.role.in_(["admin", "treasurer"]),
+                GroupMember.archived_at.is_(None)
+            )
         )
-    )
-    if not member:
-        raise HTTPException(status_code=403, detail="Only admins and treasurers can export financial statements")
+    except Exception:
+        member = await db.scalar(
+            select(GroupMember).where(
+                GroupMember.group_id == group_id,
+                GroupMember.user_id == current_user.id,
+                GroupMember.role.in_(["admin", "treasurer"])
+            )
+        )
+
     group = await db.get(Group, group_id)
     if not group:
         raise HTTPException(status_code=404, detail="Group not found")
-    entries = (await db.execute(
+        
+    if not member and group.created_by != current_user.id:
+        raise HTTPException(status_code=403, detail="Only admins and treasurers can export financial statements")
+
+    contributions = (await db.execute(
         select(Contribution)
         .options(selectinload(Contribution.user))
         .where(Contribution.group_id == group_id, Contribution.status.in_(["completed", "pending"]))
-        .order_by(Contribution.created_at.asc())
     )).scalars().all()
-    buffer = BytesIO(); pdf = canvas.Canvas(buffer, pagesize=A4); width, height = A4; y = height - 48
-    pdf.setTitle(f"{group.name} financial statement")
-    pdf.setFont("Helvetica-Bold", 16); pdf.drawString(40, y, group.name); y -= 22
-    pdf.setFont("Helvetica", 10); pdf.drawString(40, y, f"Financial statement • Code {group.code} • Balance: GHS {float(group.current_balance or 0):,.2f}"); y -= 28
-    pdf.setFont("Helvetica-Bold", 10); pdf.drawString(40, y, "Date"); pdf.drawString(130, y, "Contributor"); pdf.drawString(370, y, "Method"); pdf.drawRightString(555, y, "Amount (GHS)"); y -= 16
-    pdf.setFont("Helvetica", 9)
-    for entry in entries:
-        if y < 48: pdf.showPage(); y = height - 48; pdf.setFont("Helvetica", 9)
-        date = entry.created_at.strftime("%Y-%m-%d") if entry.created_at else "-"
-        m_name = (entry.user.full_name if entry.user and entry.user.full_name else None)
-        if not m_name and entry.meta_data:
-            m_name = entry.meta_data.get("contributor_name") or entry.meta_data.get("sender_name")
+
+    withdrawals = (await db.execute(
+        select(Withdrawal)
+        .options(selectinload(Withdrawal.requester))
+        .where(Withdrawal.group_id == group_id, Withdrawal.status.in_(["disbursed", "completed", "approved"]))
+    )).scalars().all()
+
+    all_entries = []
+    total_in = 0.0
+    total_out = 0.0
+
+    for c in contributions:
+        amt = float(c.amount or 0)
+        total_in += amt
+        m_name = c.user.full_name if c.user and c.user.full_name else None
+        meta = c.meta_data if isinstance(c.meta_data, dict) else {}
+        if not m_name and meta:
+            m_name = meta.get("contributor_name") or meta.get("sender_name") or meta.get("payer_name")
         if not m_name:
             m_name = "Member"
-        pdf.drawString(40, y, date); pdf.drawString(130, y, m_name[:30])
-        pdf.drawString(370, y, entry.method or "-" ); pdf.drawRightString(555, y, f"{float(entry.amount):,.2f}"); y -= 15
-    pdf.save(); buffer.seek(0)
+        all_entries.append({
+            "date": c.created_at,
+            "party": m_name,
+            "type": "Contribution",
+            "method": c.method or "momo",
+            "amount": amt,
+            "is_in": True
+        })
+
+    for w in withdrawals:
+        amt = float(w.amount or 0)
+        total_out += amt
+        b_name = w.beneficiary_name or (w.requester.full_name if w.requester else "Member")
+        all_entries.append({
+            "date": w.disbursed_at or w.created_at,
+            "party": f"To: {b_name[:25]}",
+            "type": "Withdrawal",
+            "method": w.disbursement_method or "momo",
+            "amount": amt,
+            "is_in": False
+        })
+
+    all_entries.sort(key=lambda x: _normalize_dt(x["date"]), reverse=False)
+
+    buffer = BytesIO()
+    pdf = canvas.Canvas(buffer, pagesize=A4)
+    width, height = A4
+    y = height - 45
+
+    # Title & Header
+    pdf.setFont("Helvetica-Bold", 14)
+    pdf.setFillColor(colors.HexColor("#065F46"))
+    pdf.drawString(40, y, f"ADANSI FINANCIAL STATEMENT — {group.name.upper()}")
+    y -= 20
+
+    pdf.setFont("Helvetica", 9)
+    pdf.setFillColor(colors.HexColor("#4B5563"))
+    pdf.drawString(40, y, f"Group Code: {group.code}  |  Type: {group.type.capitalize()}  |  Generated: {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}")
+    y -= 25
+
+    # Summary Box
+    pdf.setStrokeColor(colors.HexColor("#E5E7EB"))
+    pdf.setFillColor(colors.HexColor("#F9FAFB"))
+    pdf.rect(40, y - 35, width - 80, 40, fill=1, stroke=1)
+    
+    pdf.setFont("Helvetica-Bold", 9)
+    pdf.setFillColor(colors.HexColor("#166534"))
+    pdf.drawString(55, y - 22, f"Total In (Contributions): GHS {total_in:,.2f}")
+    pdf.setFillColor(colors.HexColor("#991B1B"))
+    pdf.drawString(230, y - 22, f"Total Out (Disbursements): GHS {total_out:,.2f}")
+    pdf.setFillColor(colors.HexColor("#1E1B4B"))
+    pdf.drawString(420, y - 22, f"Net Balance: GHS {(total_in - total_out):,.2f}")
+    y -= 50
+
+    # Table Header
+    pdf.setFillColor(colors.HexColor("#F3F4F6"))
+    pdf.rect(40, y - 16, width - 80, 20, fill=1, stroke=0)
+    pdf.setFont("Helvetica-Bold", 9)
+    pdf.setFillColor(colors.HexColor("#374151"))
+    pdf.drawString(45, y - 12, "Date")
+    pdf.drawString(120, y - 12, "Party / Contributor")
+    pdf.drawString(290, y - 12, "Type")
+    pdf.drawString(370, y - 12, "Method")
+    pdf.drawRightString(550, y - 12, "Amount (GHS)")
+    y -= 24
+
+    pdf.setFont("Helvetica", 9)
+    for entry in all_entries:
+        if y < 50:
+            pdf.showPage()
+            y = height - 45
+            pdf.setFont("Helvetica-Bold", 9)
+            pdf.setFillColor(colors.HexColor("#374151"))
+            pdf.drawString(45, y - 12, "Date")
+            pdf.drawString(120, y - 12, "Party / Contributor")
+            pdf.drawString(290, y - 12, "Type")
+            pdf.drawString(370, y - 12, "Method")
+            pdf.drawRightString(550, y - 12, "Amount (GHS)")
+            y -= 24
+            pdf.setFont("Helvetica", 9)
+
+        date_str = entry["date"].strftime("%Y-%m-%d") if entry["date"] else "-"
+        pdf.setFillColor(colors.HexColor("#1F2937"))
+        pdf.drawString(45, y, date_str)
+        pdf.drawString(120, y, entry["party"][:30])
+        pdf.drawString(290, y, entry["type"])
+        pdf.drawString(370, y, entry["method"].upper())
+
+        if entry["is_in"]:
+            pdf.setFillColor(colors.HexColor("#166534"))
+            pdf.drawRightString(550, y, f"+{entry['amount']:,.2f}")
+        else:
+            pdf.setFillColor(colors.HexColor("#991B1B"))
+            pdf.drawRightString(550, y, f"-{entry['amount']:,.2f}")
+
+        y -= 16
+
+    pdf.save()
+    buffer.seek(0)
     return StreamingResponse(buffer, media_type="application/pdf", headers={"Content-Disposition": f'attachment; filename="{group.code}-financial-statement.pdf"'})
 
 

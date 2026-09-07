@@ -145,12 +145,17 @@ export default function GroupDetailPage() {
   }
 
   const colorClass = getGroupColor(group.type)
-  const balance = group.balance ?? group.current_balance ?? 0
-  const currentMember = members.find((member) => (member.user_id || member.id) === (user?.id || user?.user_id))
-  const canManageRoles = currentMember?.role === 'admin' || currentMember?.role === 'treasurer'
+  const userIdStr = String(user?.id || user?.user_id || '').toLowerCase()
+  const allMembers = members.length > 0 ? members : (group?.members || [])
+  const currentMember = allMembers.find((member) => {
+    const memberUid = String(member.user_id || member.user?.id || member.id || '').toLowerCase()
+    return memberUid && userIdStr && memberUid === userIdStr
+  })
+  const isGroupCreator = group?.created_by && userIdStr && String(group.created_by).toLowerCase() === userIdStr
+  const canManageRoles = isGroupCreator || currentMember?.role === 'admin' || currentMember?.role === 'treasurer'
 
-  const activeMembers = members.filter((member) => !member.archived_at)
-  const archivedMembers = members.filter((member) => !!member.archived_at)
+  const activeMembers = allMembers.filter((member) => !member.archived_at)
+  const archivedMembers = allMembers.filter((member) => !!member.archived_at)
 
   const visibleTransactions = transactions.slice(0, activityLimit)
   const visibleAuditEvents = auditEvents.slice(0, auditLimit)
