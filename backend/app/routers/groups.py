@@ -43,7 +43,9 @@ async def create_group(
         join_type=request.join_type or "approval_required",
         rotation_enabled=request.rotation_enabled,
         rotation_queue=request.rotation_queue,
+    )
     return group
+
 
 
 @router.put("/{group_id}", response_model=GroupResponse)
