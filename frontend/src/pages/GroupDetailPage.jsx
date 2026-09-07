@@ -145,6 +145,7 @@ export default function GroupDetailPage() {
   }
 
   const colorClass = getGroupColor(group.type)
+  const balance = group?.balance ?? group?.current_balance ?? 0
   const userIdStr = String(user?.id || user?.user_id || '').toLowerCase()
   const allMembers = members.length > 0 ? members : (group?.members || [])
   const currentMember = allMembers.find((member) => {
