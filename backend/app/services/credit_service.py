@@ -25,12 +25,13 @@ class CreditScoringEngine:
     MAX_SCORE = 850
 
     @classmethod
-    async def calculate_score(cls, user_id: UUID) -> dict:
+    async def calculate_score(cls, user_id: UUID, force_recalculate: bool = False) -> dict:
         """Calculate credit score for a user. Returns full score breakdown."""
-        # Check cache first
-        cached = redis_service.get_cached_credit_score(str(user_id))
-        if cached:
-            return cached
+        # Check cache first unless forced
+        if not force_recalculate:
+            cached = redis_service.get_cached_credit_score(str(user_id))
+            if cached and cached.get("score", 0) > 0:
+                return cached
 
         async with AsyncSessionLocal() as session:
             user = await session.get(User, user_id)
@@ -47,7 +48,7 @@ class CreditScoringEngine:
             diversity_score = await cls._calculate_diversity(session, user_id)
 
             # 4. Tenure (10% = 100 points)
-            tenure_score = await cls._calculate_tenure(user)
+            tenure_score = cls._calculate_tenure(user)
 
             # 5. Group Standing (10% = 100 points)
             standing_score = await cls._calculate_standing(session, user_id)
@@ -111,8 +112,14 @@ class CreditScoringEngine:
             if not group or group.status != "active":
                 continue
 
-            # Calculate expected contributions based on frequency and tenure
-            days_since_join = (datetime.now(timezone.utc) - member.joined_at).days
+            # Calculate expected contributions based on frequency and tenure safely
+            joined = member.joined_at
+            if not joined:
+                days_since_join = 1
+            else:
+                if joined.tzinfo is None:
+                    joined = joined.replace(tzinfo=timezone.utc)
+                days_since_join = max(1, (datetime.now(timezone.utc) - joined).days)
 
             if group.contribution_frequency == "daily":
                 expected = days_since_join
@@ -177,8 +184,14 @@ class CreditScoringEngine:
     @classmethod
     def _calculate_tenure(cls, user: User) -> int:
         """Tenure = months since first contribution on platform."""
-        days = (datetime.now(timezone.utc) - user.created_at).days
-        months = days / 30
+        created = user.created_at
+        if not created:
+            months = 1.0
+        else:
+            if created.tzinfo is None:
+                created = created.replace(tzinfo=timezone.utc)
+            days = max(1, (datetime.now(timezone.utc) - created).days)
+            months = days / 30
 
         # Max 12 months = full points
         ratio = min(months / 12, 1.0)

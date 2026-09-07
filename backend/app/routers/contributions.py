@@ -61,6 +61,7 @@ async def settle_contribution(db: AsyncSession, contribution: Contribution, acto
         user.total_contributed += contribution.amount
     db.add(Transaction(type="contribution", reference=contribution.transaction_ref, amount=contribution.amount, group_id=contribution.group_id, user_id=contribution.user_id, status="completed", external_ref=external_ref or contribution.transaction_ref))
     db.add(AuditEvent(group_id=contribution.group_id, actor_id=actor_id, event_type="contribution_settled", entity_type="contribution", entity_id=contribution.id, amount=contribution.amount, event_metadata={"reference": contribution.transaction_ref, "method": contribution.method, "provider": provider}))
+    await credit_engine.calculate_score(contribution.user_id, force_recalculate=True)
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
