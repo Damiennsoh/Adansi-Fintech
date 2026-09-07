@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { getCreditTier } from '../lib/utils'
 
-export default function CreditScoreRing({ score = 0 }) {
+export default function CreditScoreRing({ score = 0, lightText = false, showTier = true }) {
   const [animatedScore, setAnimatedScore] = useState(0)
   const tier = getCreditTier(score)
   const circumference = 2 * Math.PI * 80
@@ -21,7 +21,7 @@ export default function CreditScoreRing({ score = 0 }) {
             cy="100"
             r="80"
             fill="none"
-            stroke="#e5e7eb"
+            stroke={lightText ? "rgba(255, 255, 255, 0.15)" : "#e5e7eb"}
             strokeWidth="12"
           />
           <circle
@@ -38,14 +38,16 @@ export default function CreditScoreRing({ score = 0 }) {
           />
         </svg>
         <div className="absolute inset-0 flex flex-col items-center justify-center">
-          <span className="text-4xl font-bold text-gray-900">{animatedScore}</span>
-          <span className="text-sm text-gray-500">/ 850</span>
+          <span className={`text-4xl font-extrabold tracking-tight ${lightText ? 'text-white drop-shadow-md' : 'text-gray-900'}`}>{animatedScore}</span>
+          <span className={`text-xs font-semibold ${lightText ? 'text-white/70' : 'text-gray-500'}`}>/ 850</span>
         </div>
       </div>
 
-      <div className={`mt-4 px-4 py-1.5 rounded-full ${tier.bg} ${tier.color} font-semibold text-sm`}>
-        {tier.tier} Tier
-      </div>
+      {showTier && (
+        <div className={`mt-3 px-4 py-1 rounded-full ${tier.bg} ${tier.color} font-semibold text-xs`}>
+          {tier.tier} Tier
+        </div>
+      )}
     </div>
   )
 }

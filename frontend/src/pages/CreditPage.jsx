@@ -45,7 +45,7 @@ export default function CreditPage() {
       <div className="bg-adansi-secondary px-5 pt-8 pb-6">
         <h1 className="text-xl font-bold text-white mb-6">Credit Score</h1>
         <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-6">
-          <CreditScoreRing score={score} />
+          <CreditScoreRing score={score} lightText={true} showTier={false} />
           <div className="w-full sm:flex-1 space-y-3 text-center sm:text-left">
             <div>
               <p className="text-gray-400 text-xs">Loan Eligibility</p>
