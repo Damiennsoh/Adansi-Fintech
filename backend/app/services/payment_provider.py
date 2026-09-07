@@ -67,18 +67,18 @@ async def process_contribution(data: Dict[str, Any]) -> Dict[str, Any]:
     provider = get_payment_provider()
 
     if provider == "paystack":
-        method = (data.get("method") or "card").lower()
-        if method == "card":
-            return await paystack_client.receive_money(
+        method = (data.get("method") or "momo").lower()
+        if paystack_client.is_configured:
+            return await paystack_client.initialize_payment(
                 amount=Decimal(str(data["amount"])),
                 email=data.get("payer_email") or "contribution@adansi.app",
                 description=data.get("description"),
                 reference=data.get("reference"),
                 callback_url=data.get("callback_url"),
                 metadata=data.get("metadata"),
+                channels=["card", "mobile_money"] if method == "momo" else ["card"],
             )
-        # Paystack test mode is used for card checkout only. MoMo routes through
-        # Hubtel when enabled, or the local sandbox during development.
+        # Fallback to momo_service / sandbox if paystack keys not set
         return await momo_service.request_payment(
             phone=data.get("payer_phone", ""),
             amount=Decimal(str(data["amount"])),

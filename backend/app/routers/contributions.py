@@ -154,9 +154,9 @@ async def create_contribution(
             "provider": active_provider,
         }
 
-    if request.method == "card" and result.get("authorization_url"):
+    if result.get("authorization_url"):
         return {
-            "message": "Card checkout initialized — redirect user to Paystack hosted page",
+            "message": f"Payment checkout initialized ({active_provider}) — redirect user to payment gateway",
             "contribution_id": str(contribution.id),
             "transaction_ref": result.get("reference") or transaction_ref,
             "amount": float(request.amount),
