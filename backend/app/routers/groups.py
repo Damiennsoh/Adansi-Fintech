@@ -176,11 +176,11 @@ async def get_group_ledger(group_id: UUID, current_user: User = Depends(get_curr
     if not group:
         raise HTTPException(status_code=404, detail="Group not found")
     
-    # Get completed contributions with eager-loaded user relationship
+    # Get contributions (completed or pending) with eager-loaded user relationship
     contributions = (await db.execute(
         select(Contribution)
         .options(selectinload(Contribution.user))
-        .where(Contribution.group_id == group_id, Contribution.status == "completed")
+        .where(Contribution.group_id == group_id, Contribution.status.in_(["completed", "pending"]))
         .order_by(Contribution.created_at.desc())
     )).scalars().all()
     
@@ -197,7 +197,7 @@ async def get_group_ledger(group_id: UUID, current_user: User = Depends(get_curr
     for c in contributions:
         m_name = (c.user.full_name if c.user and c.user.full_name else None)
         if not m_name and c.meta_data:
-            m_name = c.meta_data.get("contributor_name") or c.meta_data.get("sender_name")
+            m_name = c.meta_data.get("contributor_name") or c.meta_data.get("sender_name") or c.meta_data.get("payer_name")
         if not m_name:
             m_name = "Member"
 
@@ -247,21 +247,28 @@ async def get_group_ledger(group_id: UUID, current_user: User = Depends(get_curr
 
 @router.get("/{group_id}/ledger.pdf")
 async def export_group_ledger_pdf(group_id: UUID, current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    """Generate a downloadable financial statement for active group members."""
+    """Generate a downloadable financial statement for group admins and treasurers."""
     from io import BytesIO
     from fastapi.responses import StreamingResponse
     from reportlab.lib.pagesizes import A4
     from reportlab.pdfgen import canvas
-    member = await db.scalar(select(GroupMember).where(GroupMember.group_id == group_id, GroupMember.user_id == current_user.id, GroupMember.archived_at.is_(None)))
+    member = await db.scalar(
+        select(GroupMember).where(
+            GroupMember.group_id == group_id,
+            GroupMember.user_id == current_user.id,
+            GroupMember.role.in_(["admin", "treasurer"]),
+            GroupMember.archived_at.is_(None)
+        )
+    )
     if not member:
-        raise HTTPException(status_code=403, detail="Not an active group member")
+        raise HTTPException(status_code=403, detail="Only admins and treasurers can export financial statements")
     group = await db.get(Group, group_id)
     if not group:
         raise HTTPException(status_code=404, detail="Group not found")
     entries = (await db.execute(
         select(Contribution)
         .options(selectinload(Contribution.user))
-        .where(Contribution.group_id == group_id, Contribution.status == "completed")
+        .where(Contribution.group_id == group_id, Contribution.status.in_(["completed", "pending"]))
         .order_by(Contribution.created_at.asc())
     )).scalars().all()
     buffer = BytesIO(); pdf = canvas.Canvas(buffer, pagesize=A4); width, height = A4; y = height - 48
@@ -556,7 +563,7 @@ async def get_group_contributions(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """Paginated list of group contributions."""
+    """Paginated list of group contributions with contributor names for the activity feed."""
     member_check = await db.execute(
         select(GroupMember).where(
             GroupMember.group_id == group_id,
@@ -572,13 +579,33 @@ async def get_group_contributions(
 
     result = await db.execute(
         select(Contribution)
+        .options(selectinload(Contribution.user))
         .where(Contribution.group_id == group_id)
         .order_by(Contribution.created_at.desc())
         .offset(offset)
         .limit(limit)
     )
     contributions = result.scalars().all()
-    return {"contributions": contributions, "count": len(contributions)}
+
+    items = []
+    for c in contributions:
+        c_name = (c.user.full_name if c.user and c.user.full_name else None)
+        if not c_name and c.meta_data:
+            c_name = c.meta_data.get("contributor_name") or c.meta_data.get("sender_name") or c.meta_data.get("payer_name")
+        if not c_name:
+            c_name = "Member"
+        items.append({
+            "id": str(c.id),
+            "amount": float(c.amount),
+            "status": c.status,
+            "method": c.method,
+            "transaction_ref": c.transaction_ref,
+            "created_at": c.created_at,
+            "contributor_name": c_name,
+            "contribution_frequency": c.meta_data.get("contribution_frequency") if c.meta_data else None,
+        })
+
+    return {"contributions": items, "count": len(items)}
 
 
 @router.get("/{group_id}/withdrawals")

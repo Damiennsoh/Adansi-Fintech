@@ -420,22 +420,24 @@ export default function GroupDetailPage() {
           </div>
         ) : activeTab === 'ledger' ? (
           <div className="space-y-3">
-            {/* Export financial statement button — available across mobile and PC views */}
-            <button
-              onClick={downloadStatement}
-              disabled={isExporting}
-              className="w-full flex items-center justify-center gap-2 rounded-xl bg-adansi-secondary px-4 py-3 text-sm font-semibold text-white hover:bg-adansi-secondary/90 transition-colors shadow-sm disabled:opacity-50"
-            >
-              {isExporting ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" /> Generating financial statement...
-                </>
-              ) : (
-                <>
-                  <FileDown className="h-4 w-4" /> Export financial statement (PDF)
-                </>
-              )}
-            </button>
+            {/* Export financial statement button — admins and treasurers only */}
+            {canManageRoles && (
+              <button
+                onClick={downloadStatement}
+                disabled={isExporting}
+                className="w-full flex items-center justify-center gap-2 rounded-xl bg-adansi-secondary px-4 py-3 text-sm font-semibold text-white hover:bg-adansi-secondary/90 transition-colors shadow-sm disabled:opacity-50"
+              >
+                {isExporting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" /> Generating financial statement...
+                  </>
+                ) : (
+                  <>
+                    <FileDown className="h-4 w-4" /> Export financial statement (PDF)
+                  </>
+                )}
+              </button>
+            )}
 
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
               {groupLedger.entries.length === 0 ? (

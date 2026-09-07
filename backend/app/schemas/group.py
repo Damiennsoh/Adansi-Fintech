@@ -78,6 +78,7 @@ class GroupMemberResponse(BaseModel):
     id: UUID
     user_id: UUID
     full_name: str = ""
+    phone: Optional[str] = None
     role: str
     joined_at: datetime
     archived_at: Optional[datetime] = None
@@ -96,6 +97,19 @@ class GroupMemberResponse(BaseModel):
         if user is not None:
             return getattr(user, "full_name", "")
         return ""
+
+    @field_validator("phone", mode="before")
+    @classmethod
+    def extract_phone(cls, value, info):
+        if value not in (None, ""):
+            return value
+        obj = info.data if isinstance(info.data, object) else None
+        if obj is None:
+            return None
+        user = getattr(obj, "user", None)
+        if user is not None:
+            return getattr(user, "phone", None)
+        return None
 
     @field_validator("total_contributed", mode="before")
     @classmethod
