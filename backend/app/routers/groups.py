@@ -185,6 +185,12 @@ async def get_group_ledger(group_id: UUID, current_user: User = Depends(get_curr
     # Combine and sort by date
     entries = []
     for c in contributions:
+        m_name = (c.user.full_name if c.user and c.user.full_name else None)
+        if not m_name and c.meta_data:
+            m_name = c.meta_data.get("contributor_name") or c.meta_data.get("sender_name")
+        if not m_name:
+            m_name = "Member"
+
         entries.append({
             "id": str(c.id),
             "type": "contribution",
@@ -193,11 +199,12 @@ async def get_group_ledger(group_id: UUID, current_user: User = Depends(get_curr
             "method": c.method,
             "reference": c.transaction_ref,
             "created_at": c.created_at,
-            "member_name": c.user.full_name if c.user else "Member",
+            "member_name": m_name,
             "contribution_frequency": c.meta_data.get("contribution_frequency") if c.meta_data else None
         })
     
     for w in withdrawals:
+        req_name = (w.requester.full_name if w.requester and w.requester.full_name else "Member")
         entries.append({
             "id": str(w.id),
             "type": "withdrawal",
@@ -206,7 +213,8 @@ async def get_group_ledger(group_id: UUID, current_user: User = Depends(get_curr
             "method": w.disbursement_method or "momo",
             "reference": w.momo_disbursement_ref or f"WITH-{w.id.hex[:8].upper()}",
             "created_at": w.disbursed_at or w.created_at,
-            "member_name": w.requester.full_name if w.requester else "Member",
+            "member_name": req_name,
+            "requester_name": req_name,
             "beneficiary_name": w.beneficiary_name,
             "beneficiary_phone": w.beneficiary_phone
         })
@@ -229,14 +237,14 @@ async def get_group_ledger(group_id: UUID, current_user: User = Depends(get_curr
 
 @router.get("/{group_id}/ledger.pdf")
 async def export_group_ledger_pdf(group_id: UUID, current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    """Generate a downloadable financial statement for admins and treasurers."""
+    """Generate a downloadable financial statement for active group members."""
     from io import BytesIO
     from fastapi.responses import StreamingResponse
     from reportlab.lib.pagesizes import A4
     from reportlab.pdfgen import canvas
-    member = await db.scalar(select(GroupMember).where(GroupMember.group_id == group_id, GroupMember.user_id == current_user.id, GroupMember.role.in_(["admin", "treasurer"]), GroupMember.archived_at.is_(None)))
+    member = await db.scalar(select(GroupMember).where(GroupMember.group_id == group_id, GroupMember.user_id == current_user.id, GroupMember.archived_at.is_(None)))
     if not member:
-        raise HTTPException(status_code=403, detail="Only admins and treasurers can export statements")
+        raise HTTPException(status_code=403, detail="Not an active group member")
     group = await db.get(Group, group_id)
     if not group:
         raise HTTPException(status_code=404, detail="Group not found")
@@ -250,7 +258,12 @@ async def export_group_ledger_pdf(group_id: UUID, current_user: User = Depends(g
     for entry in entries:
         if y < 48: pdf.showPage(); y = height - 48; pdf.setFont("Helvetica", 9)
         date = entry.created_at.strftime("%Y-%m-%d") if entry.created_at else "-"
-        pdf.drawString(40, y, date); pdf.drawString(130, y, (entry.user.full_name if entry.user else "Member")[:30])
+        m_name = (entry.user.full_name if entry.user and entry.user.full_name else None)
+        if not m_name and entry.meta_data:
+            m_name = entry.meta_data.get("contributor_name") or entry.meta_data.get("sender_name")
+        if not m_name:
+            m_name = "Member"
+        pdf.drawString(40, y, date); pdf.drawString(130, y, m_name[:30])
         pdf.drawString(370, y, entry.method or "-" ); pdf.drawRightString(555, y, f"{float(entry.amount):,.2f}"); y -= 15
     pdf.save(); buffer.seek(0)
     return StreamingResponse(buffer, media_type="application/pdf", headers={"Content-Disposition": f'attachment; filename="{group.code}-financial-statement.pdf"'})
@@ -440,6 +453,21 @@ async def archive_member(group_id: UUID, user_id: UUID, current_user: User = Dep
     db.add(AuditEvent(group_id=group_id, actor_id=current_user.id, event_type="member_archived", entity_type="group_member", entity_id=member.id, event_metadata={"target_user_id": str(user_id)}))
     await db.commit()
     return {"message": "Member archived", "user_id": str(user_id)}
+
+
+@router.post("/{group_id}/members/{user_id}/unarchive")
+async def unarchive_member(group_id: UUID, user_id: UUID, current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    """Restore an archived member back to active status."""
+    admin = await db.scalar(select(GroupMember).where(GroupMember.group_id == group_id, GroupMember.user_id == current_user.id, GroupMember.role == "admin", GroupMember.archived_at.is_(None)))
+    if not admin:
+        raise HTTPException(status_code=403, detail="Only admins can restore archived members")
+    member = await db.scalar(select(GroupMember).where(GroupMember.group_id == group_id, GroupMember.user_id == user_id, GroupMember.archived_at.is_not(None)))
+    if not member:
+        raise HTTPException(status_code=404, detail="Archived member not found")
+    member.archived_at = None
+    db.add(AuditEvent(group_id=group_id, actor_id=current_user.id, event_type="member_restored", entity_type="group_member", entity_id=member.id, event_metadata={"target_user_id": str(user_id)}))
+    await db.commit()
+    return {"message": "Member restored", "user_id": str(user_id)}
 
 
 @router.get("/{group_id}/balance")

@@ -139,6 +139,15 @@ export function useGroupDetail(groupId) {
     },
   })
 
+  const unarchiveMember = useMutation({
+    mutationFn: async ({ userId }) => (await api.post(`/groups/${groupId}/members/${userId}/unarchive`)).data,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['group', groupId] })
+      queryClient.invalidateQueries({ queryKey: ['members', groupId] })
+      queryClient.invalidateQueries({ queryKey: ['audit', groupId] })
+    },
+  })
+
   const membersQuery = useQuery({
     queryKey: ['members', groupId],
     queryFn: async () => {
@@ -184,6 +193,7 @@ export function useGroupDetail(groupId) {
     inviteMember,
     updateMemberRole,
     archiveMember,
+    unarchiveMember,
     groupLedger: groupLedgerQuery.data || { entries: [], group: null },
   }
 }

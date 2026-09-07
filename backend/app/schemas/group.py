@@ -80,6 +80,7 @@ class GroupMemberResponse(BaseModel):
     full_name: str = ""
     role: str
     joined_at: datetime
+    archived_at: Optional[datetime] = None
     total_contributed: Decimal = Decimal("0")
     contribution_streak: int = 0
 
