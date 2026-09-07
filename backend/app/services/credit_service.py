@@ -258,6 +258,10 @@ class CreditScoringEngine:
         profile.max_loan_amount = Decimal(str(data["max_loan_amount"]))
         profile.last_calculated_at = datetime.now(timezone.utc)
 
+        user = await session.get(User, user_id)
+        if user:
+            user.credit_score = score
+
         await session.commit()
 
 

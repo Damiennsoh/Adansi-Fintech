@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { Plus, Bell, TrendingUp, Wallet } from 'lucide-react'
 import { useGroups } from '../hooks/useGroups'
 import { useUserProfile } from '../hooks/useAuth'
+import { useCredit } from '../hooks/useContributions'
 import { useRealtimeNotifications } from '../hooks/useRealtime'
 import GroupCard from '../components/GroupCard'
 import TransactionItem from '../components/TransactionItem'
@@ -12,12 +13,15 @@ import { formatCurrency } from '../lib/utils'
 export default function DashboardPage() {
   const { groups, isLoading } = useGroups()
   const { data: profile } = useUserProfile()
+  const { creditProfile } = useCredit()
   const [showUSSD, setShowUSSD] = useState(false)
 
   useRealtimeNotifications(profile?.id)
 
   const totalBalance = groups.reduce((sum, g) => sum + (g.balance ?? g.current_balance ?? 0), 0)
   const recentTransactions = groups.flatMap(g => g.recent_transactions || []).slice(0, 5)
+  const score = creditProfile?.score ?? creditProfile?.credit_score ?? profile?.credit_score ?? 0
+  const loanEligibleAmount = creditProfile?.max_loan_amount ?? creditProfile?.loan_eligibility ?? 0
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -66,7 +70,7 @@ export default function DashboardPage() {
           </div>
           <div className="flex flex-col sm:flex-row items-center gap-4">
             <div className="flex-shrink-0">
-              <CreditScoreRing score={profile?.credit_score || 0} />
+              <CreditScoreRing score={score} />
             </div>
             <div className="w-full sm:flex-1 space-y-2 text-center sm:text-left">
               <div className="flex items-center gap-2">
@@ -74,7 +78,7 @@ export default function DashboardPage() {
                 <span className="text-sm text-gray-600">Loan Eligibility</span>
               </div>
               <p className="text-lg font-bold text-gray-900">
-                {formatCurrency(profile?.loan_eligibility || 0)}
+                {formatCurrency(loanEligibleAmount)}
               </p>
               <p className="text-xs text-gray-500">
                 Keep contributing to increase your score

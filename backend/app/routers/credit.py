@@ -24,9 +24,11 @@ async def get_my_credit(current_user: User = Depends(get_current_user), db: Asyn
 
     return {
         "user_id": str(current_user.id),
+        "score": result["score"],
         "credit_score": result["score"],
         "tier": result["tier"],
         "loan_eligible": result["loan_eligible"],
+        "loan_eligibility": result["max_loan_amount"],
         "max_loan_amount": result["max_loan_amount"],
         "breakdown": result["breakdown"],
         "calculated_at": result["calculated_at"]

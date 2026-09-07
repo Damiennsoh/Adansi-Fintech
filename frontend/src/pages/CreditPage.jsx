@@ -26,8 +26,9 @@ export default function CreditPage() {
   const [loanAmount, setLoanAmount] = useState('')
   const [isVouched, setIsVouched] = useState(false)
 
-  const tier = getCreditTier(creditProfile?.score || 0)
-  const baseEligibility = creditProfile?.loan_eligibility || 2000
+  const score = creditProfile?.score ?? creditProfile?.credit_score ?? 0
+  const tier = getCreditTier(score)
+  const baseEligibility = creditProfile?.max_loan_amount ?? creditProfile?.loan_eligibility ?? 0
   const maxEligibleLoan = isVouched ? Math.round(baseEligibility * 1.25) : baseEligibility
 
   const handleApplyLoan = async (e) => {
@@ -44,11 +45,11 @@ export default function CreditPage() {
       <div className="bg-adansi-secondary px-5 pt-8 pb-6">
         <h1 className="text-xl font-bold text-white mb-6">Credit Score</h1>
         <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-6">
-          <CreditScoreRing score={creditProfile?.score || 0} />
+          <CreditScoreRing score={score} />
           <div className="w-full sm:flex-1 space-y-3 text-center sm:text-left">
             <div>
               <p className="text-gray-400 text-xs">Loan Eligibility</p>
-              <p className="text-2xl font-bold text-white">{formatCurrency(creditProfile?.loan_eligibility || 0)}</p>
+              <p className="text-2xl font-bold text-white">{formatCurrency(baseEligibility)}</p>
             </div>
             <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full ${tier.bg} ${tier.color} text-xs font-bold`}>
               <Shield className="w-3 h-3" />
