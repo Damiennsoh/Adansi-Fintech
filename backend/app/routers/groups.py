@@ -176,11 +176,21 @@ async def get_group_ledger(group_id: UUID, current_user: User = Depends(get_curr
     if not group:
         raise HTTPException(status_code=404, detail="Group not found")
     
-    # Get completed contributions
-    contributions = (await db.execute(select(Contribution).where(Contribution.group_id == group_id, Contribution.status == "completed").order_by(Contribution.created_at.desc()))).scalars().all()
+    # Get completed contributions with eager-loaded user relationship
+    contributions = (await db.execute(
+        select(Contribution)
+        .options(selectinload(Contribution.user))
+        .where(Contribution.group_id == group_id, Contribution.status == "completed")
+        .order_by(Contribution.created_at.desc())
+    )).scalars().all()
     
-    # Get completed withdrawals
-    withdrawals = (await db.execute(select(Withdrawal).where(Withdrawal.group_id == group_id, Withdrawal.status == "disbursed").order_by(Withdrawal.created_at.desc()))).scalars().all()
+    # Get completed withdrawals with eager-loaded requester relationship
+    withdrawals = (await db.execute(
+        select(Withdrawal)
+        .options(selectinload(Withdrawal.requester))
+        .where(Withdrawal.group_id == group_id, Withdrawal.status == "disbursed")
+        .order_by(Withdrawal.created_at.desc())
+    )).scalars().all()
     
     # Combine and sort by date
     entries = []
@@ -248,7 +258,12 @@ async def export_group_ledger_pdf(group_id: UUID, current_user: User = Depends(g
     group = await db.get(Group, group_id)
     if not group:
         raise HTTPException(status_code=404, detail="Group not found")
-    entries = (await db.execute(select(Contribution).where(Contribution.group_id == group_id, Contribution.status == "completed").order_by(Contribution.created_at.asc()))).scalars().all()
+    entries = (await db.execute(
+        select(Contribution)
+        .options(selectinload(Contribution.user))
+        .where(Contribution.group_id == group_id, Contribution.status == "completed")
+        .order_by(Contribution.created_at.asc())
+    )).scalars().all()
     buffer = BytesIO(); pdf = canvas.Canvas(buffer, pagesize=A4); width, height = A4; y = height - 48
     pdf.setTitle(f"{group.name} financial statement")
     pdf.setFont("Helvetica-Bold", 16); pdf.drawString(40, y, group.name); y -= 22
@@ -271,8 +286,9 @@ async def export_group_ledger_pdf(group_id: UUID, current_user: User = Depends(g
 
 @router.get("/{group_id}/join-requests")
 async def get_join_requests(group_id: UUID, current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    admin = await db.execute(select(GroupMember).where(GroupMember.group_id == group_id, GroupMember.user_id == current_user.id, GroupMember.role.in_(["admin", "treasurer"])))
-    if not admin.scalar_one_or_none(): raise HTTPException(status_code=403, detail="Only group admins can review requests")
+    admin = await db.execute(select(GroupMember).where(GroupMember.group_id == group_id, GroupMember.user_id == current_user.id, GroupMember.role.in_(["admin", "treasurer"]), GroupMember.archived_at.is_(None)))
+    if not admin.scalar_one_or_none():
+        return {"requests": []}
     result = await db.execute(select(JoinRequest).where(JoinRequest.group_id == group_id, JoinRequest.status == "pending"))
     return {"requests": [{"id": str(r.id), "user_id": str(r.user_id), "status": r.status, "created_at": r.requested_at} for r in result.scalars().all()]}
 

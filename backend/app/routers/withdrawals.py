@@ -2,6 +2,7 @@
 from fastapi import APIRouter, HTTPException, status, Depends, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 from uuid import UUID
 from datetime import datetime
 
@@ -196,7 +197,9 @@ async def get_pending_withdrawals(
         raise HTTPException(status_code=403, detail="Access denied")
 
     result = await db.execute(
-        select(Withdrawal).where(
+        select(Withdrawal)
+        .options(selectinload(Withdrawal.requester))
+        .where(
             Withdrawal.group_id == group_id,
             Withdrawal.status == "pending"
         ).order_by(Withdrawal.created_at.desc())
@@ -205,14 +208,14 @@ async def get_pending_withdrawals(
 
     items = []
     for w in withdrawals:
-        requester = await db.get(User, w.requested_by)
+        req_name = w.requester.full_name if w.requester and w.requester.full_name else "Member"
         items.append({
             "id": str(w.id),
             "amount": float(w.amount),
             "reason": w.reason,
             "beneficiary_name": w.beneficiary_name,
             "beneficiary_phone": w.beneficiary_phone,
-            "requester_name": requester.full_name if requester else "Unknown",
+            "requester_name": req_name,
             "approval_count": w.approval_count,
             "approval_required": w.approval_required,
             "created_at": w.created_at,
