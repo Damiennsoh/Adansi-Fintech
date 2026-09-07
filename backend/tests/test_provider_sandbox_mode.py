@@ -96,7 +96,9 @@ async def test_process_disbursement_paystack_returns_mocked_flow(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_verify_callback_paystack_accepts_reference_when_unconfigured():
+async def test_verify_callback_paystack_accepts_reference_when_unconfigured(monkeypatch):
+    from app.services.paystack_client import paystack_client
+    monkeypatch.setattr(paystack_client, "secret_key", "")
     verification = await verify_callback("paystack", "TEST-REF-123")
     assert verification.get("success") is True
 

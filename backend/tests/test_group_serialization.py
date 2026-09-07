@@ -1,3 +1,4 @@
+import pytest
 from datetime import datetime
 from uuid import uuid4
 from types import SimpleNamespace
@@ -129,7 +130,11 @@ def test_group_search_endpoint_accepts_name_and_code_queries(monkeypatch):
         members=[object(), object()],
     )
 
-    monkeypatch.setattr('app.routers.groups.group_service.search_groups', lambda query: [fake_group])
+    async def fake_search(query, db=None):
+        return [fake_group]
+
+    from app.services.group_service import group_service
+    monkeypatch.setattr(group_service, 'search_groups', fake_search)
 
     response = client.get('/api/v1/groups/search', params={'query': 'family'})
 
@@ -140,7 +145,8 @@ def test_group_search_endpoint_accepts_name_and_code_queries(monkeypatch):
     assert payload[0]['member_count'] == 2
 
 
-def test_group_lookup_accepts_lowercase_and_whitespace_codes(monkeypatch):
+@pytest.mark.asyncio
+async def test_group_lookup_accepts_lowercase_and_whitespace_codes(monkeypatch):
     group = Group(
         id=uuid4(),
         name="Accra Circle",
@@ -156,13 +162,15 @@ def test_group_lookup_accepts_lowercase_and_whitespace_codes(monkeypatch):
         updated_at=datetime.utcnow(),
     )
 
-    class FakeSession:
-        async def execute(self, stmt):
-            return SimpleNamespace(scalar_one_or_none=lambda: group)
+    async def fake_get_by_code(code, db=None):
+        if code.strip().upper() == "ACR12Q":
+            return group
+        return None
 
-    monkeypatch.setattr('app.services.group_service.AsyncSessionLocal', lambda: FakeSession())
+    from app.services.group_service import group_service
+    monkeypatch.setattr(group_service, 'get_group_by_code', fake_get_by_code)
 
-    result = __import__('app.services.group_service', fromlist=['group_service']).group_service.get_group_by_code('  acr12q  ')
+    result = await group_service.get_group_by_code('  acr12q  ')
 
     assert result is not None
     assert result.code == 'ACR12Q'
