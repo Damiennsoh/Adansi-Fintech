@@ -125,17 +125,35 @@ app = FastAPI(
     redoc_url="/redoc"
 )
 
+from starlette.exceptions import HTTPException as StarletteHTTPException
+
+def _cors_headers_for(request: Request) -> dict:
+    origin = request.headers.get("origin")
+    if not origin:
+        return {"Access-Control-Allow-Origin": "*"}
+    return {
+        "Access-Control-Allow-Origin": origin,
+        "Access-Control-Allow-Credentials": "true",
+        "Vary": "Origin",
+    }
+
+@app.exception_handler(StarletteHTTPException)
+async def http_exception_handler(request: Request, exc: StarletteHTTPException):
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": exc.detail},
+        headers=_cors_headers_for(request)
+    )
+
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception):
     """Return JSON errors with CORS headers instead of opaque browser failures."""
     logger.exception("Unhandled API error: %s", exc)
-    origin = request.headers.get("origin")
-    headers = {}
-    if origin and (origin in allowed_origins or origin.endswith(".vercel.app")):
-        headers["Access-Control-Allow-Origin"] = origin
-        headers["Access-Control-Allow-Credentials"] = "true"
-        headers["Vary"] = "Origin"
-    return JSONResponse(status_code=500, content={"detail": "Internal server error"}, headers=headers)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": str(exc) if settings.debug else "Internal server error"},
+        headers=_cors_headers_for(request)
+    )
 
 
 # CORS: Allow frontend origin

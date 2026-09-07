@@ -487,10 +487,18 @@ export default function GroupDetailPage() {
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-1.5 flex-wrap">
-                          <p className="font-medium text-gray-900 text-sm truncate">
-                            {isContribution
-                              ? `Contribution by ${displayMember}`
-                              : `Disbursement to ${displayBeneficiary || displayMember}`}
+                          <p className="text-sm truncate">
+                            {isContribution ? (
+                              <>
+                                <span className="text-gray-500 font-normal">Contribution by </span>
+                                <span className="font-bold text-gray-900">{displayMember}</span>
+                              </>
+                            ) : (
+                              <>
+                                <span className="text-gray-500 font-normal">Disbursement to </span>
+                                <span className="font-bold text-gray-900">{displayBeneficiary || displayMember}</span>
+                              </>
+                            )}
                           </p>
                           {isGuest && (
                             <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-100 whitespace-nowrap">
