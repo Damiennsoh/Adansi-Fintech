@@ -439,14 +439,41 @@ export default function GroupDetailPage() {
               </button>
             )}
 
+            {/* Ledger summary totals */}
+            {groupLedger.entries.length > 0 && (() => {
+              const totalIn = groupLedger.entries.filter(e => e.type === 'contribution').reduce((s, e) => s + e.amount, 0)
+              const totalOut = groupLedger.entries.filter(e => e.type === 'withdrawal').reduce((s, e) => s + e.amount, 0)
+              return (
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 grid grid-cols-3 gap-2 text-center">
+                  <div>
+                    <p className="text-[10px] text-gray-400 uppercase font-medium tracking-wide">Total In</p>
+                    <p className="text-sm font-bold text-green-600 mt-0.5">{formatCurrency(totalIn)}</p>
+                  </div>
+                  <div className="border-x border-gray-100">
+                    <p className="text-[10px] text-gray-400 uppercase font-medium tracking-wide">Total Out</p>
+                    <p className="text-sm font-bold text-red-500 mt-0.5">{formatCurrency(totalOut)}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-gray-400 uppercase font-medium tracking-wide">Net</p>
+                    <p className="text-sm font-bold text-gray-900 mt-0.5">{formatCurrency(totalIn - totalOut)}</p>
+                  </div>
+                </div>
+              )
+            })()}
+
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
               {groupLedger.entries.length === 0 ? (
-                <p className="p-8 text-center text-sm text-gray-500">No completed contribution history yet.</p>
+                <div className="text-center py-10 px-4">
+                  <Wallet className="w-12 h-12 text-gray-200 mx-auto mb-3" />
+                  <p className="text-gray-700 text-sm font-medium">No transactions yet</p>
+                  <p className="text-gray-400 text-xs mt-1">Contributions and withdrawals will appear here once settled.</p>
+                </div>
               ) : (
                 groupLedger.entries.map((entry) => {
                   const isContribution = entry.type === 'contribution'
                   const displayMember = entry.member_name || 'Member'
                   const displayBeneficiary = entry.beneficiary_name
+                  const isGuest = entry.is_guest === true
 
                   return (
                     <div key={`${entry.type}-${entry.id}`} className="flex items-center gap-3 py-3 px-4 border-b border-gray-50 last:border-0">
@@ -454,11 +481,18 @@ export default function GroupDetailPage() {
                         {isContribution ? <ArrowDownLeft className="w-5 h-5 text-green-600" /> : <ArrowUpRight className="w-5 h-5 text-red-600" />}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="font-medium text-gray-900 text-sm truncate">
-                          {isContribution
-                            ? `Contribution by ${displayMember}`
-                            : `Disbursement to ${displayBeneficiary || displayMember}`}
-                        </p>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <p className="font-medium text-gray-900 text-sm truncate">
+                            {isContribution
+                              ? `Contribution by ${displayMember}`
+                              : `Disbursement to ${displayBeneficiary || displayMember}`}
+                          </p>
+                          {isGuest && (
+                            <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-100 whitespace-nowrap">
+                              Guest
+                            </span>
+                          )}
+                        </div>
                         <p className="text-xs text-gray-500 truncate">
                           {entry.contribution_frequency || group.contribution_frequency || 'adhoc'} • {entry.method || 'momo'} • {formatRelativeTime(entry.created_at)}
                         </p>

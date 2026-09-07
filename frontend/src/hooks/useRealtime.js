@@ -1,9 +1,11 @@
 import { useEffect } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { subscribeToTable } from '../lib/supabase'
 import { useGroupStore } from '../store/groupStore'
 
 export function useRealtimeContributions(groupId) {
   const { addTransaction, updateGroupBalance } = useGroupStore()
+  const queryClient = useQueryClient()
 
   useEffect(() => {
     if (!groupId) return
@@ -12,11 +14,17 @@ export function useRealtimeContributions(groupId) {
       if (payload.new.group_id === groupId) {
         addTransaction(payload.new)
         updateGroupBalance(groupId, payload.new.new_balance)
+
+        // Invalidate React Query caches so Ledger, Activity, and Audit tabs refresh
+        queryClient.invalidateQueries({ queryKey: ['group-ledger', groupId] })
+        queryClient.invalidateQueries({ queryKey: ['transactions', groupId] })
+        queryClient.invalidateQueries({ queryKey: ['audit', groupId] })
+        queryClient.invalidateQueries({ queryKey: ['group', groupId] })
       }
     })
 
     return () => unsubscribe()
-  }, [groupId])
+  }, [groupId, queryClient])
 }
 
 export function useRealtimeNotifications(userId) {

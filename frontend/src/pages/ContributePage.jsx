@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import { useQueryClient } from '@tanstack/react-query'
 import { useContributions } from '../hooks/useContributions'
 import { useAuthStore } from '../store/authStore'
 import { ArrowLeft, Loader2, Wallet, Phone, CheckCircle2, CreditCard, Clock } from 'lucide-react'
@@ -33,6 +34,7 @@ function loadPaystackSDK() {
 export default function ContributePage() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const { user } = useAuthStore()
   const { contribute } = useContributions()
   const [amount, setAmount] = useState('')
@@ -130,8 +132,14 @@ export default function ContributePage() {
           amount: parseFloat(amount),
           method: 'card',
           network,
+          payer_name: user?.full_name,
         })
         if (init.sandbox || init.status === 'completed') {
+          // Invalidate ledger + activity caches before navigating back
+          queryClient.invalidateQueries({ queryKey: ['group-ledger', id] })
+          queryClient.invalidateQueries({ queryKey: ['transactions', id] })
+          queryClient.invalidateQueries({ queryKey: ['audit', id] })
+          queryClient.invalidateQueries({ queryKey: ['group', id] })
           setStep('success')
           setTimeout(() => navigate(`/groups/${id}`), 2000)
           return
@@ -139,7 +147,7 @@ export default function ContributePage() {
         await openPaystackInline(init)
         return
       }
-      await contribute.mutateAsync({ groupId: id, amount: parseFloat(amount), network, payerPhone })
+      await contribute.mutateAsync({ groupId: id, amount: parseFloat(amount), network, payerPhone, method: 'momo', payerName: user?.full_name })
       setStep('success')
       setTimeout(() => navigate(`/groups/${id}`), 2000)
     } catch (err) {

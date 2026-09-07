@@ -5,13 +5,24 @@ export function useContributions() {
   const queryClient = useQueryClient()
 
   const contribute = useMutation({
-    mutationFn: async ({ groupId, amount, network = 'mtn', payerPhone }) => {
-      const { data } = await api.post('/contributions', { group_id: groupId, amount, network, payer_phone: payerPhone || undefined })
+    mutationFn: async ({ groupId, amount, network = 'mtn', payerPhone, method = 'momo', payerName }) => {
+      const { data } = await api.post('/contributions', {
+        group_id: groupId,
+        amount,
+        network,
+        method,
+        payer_phone: payerPhone || undefined,
+        payer_name: payerName || undefined,
+      })
       return data
     },
     onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: ['group', variables.groupId] })
-      queryClient.invalidateQueries({ queryKey: ['transactions', variables.groupId] })
+      const groupId = variables.groupId
+      queryClient.invalidateQueries({ queryKey: ['group', groupId] })
+      queryClient.invalidateQueries({ queryKey: ['transactions', groupId] })
+      // Critically: invalidate the ledger so it reflects the new contribution immediately
+      queryClient.invalidateQueries({ queryKey: ['group-ledger', groupId] })
+      queryClient.invalidateQueries({ queryKey: ['audit', groupId] })
       queryClient.invalidateQueries({ queryKey: ['groups'] })
     },
   })
@@ -48,8 +59,12 @@ export function useWithdrawals() {
       return data
     },
     onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: ['group', variables.groupId] })
-      queryClient.invalidateQueries({ queryKey: ['pending-withdrawals', variables.groupId] })
+      const groupId = variables.groupId
+      queryClient.invalidateQueries({ queryKey: ['group', groupId] })
+      queryClient.invalidateQueries({ queryKey: ['pending-withdrawals', groupId] })
+      // Invalidate ledger so disbursed withdrawals appear immediately
+      queryClient.invalidateQueries({ queryKey: ['group-ledger', groupId] })
+      queryClient.invalidateQueries({ queryKey: ['audit', groupId] })
     },
   })
 
@@ -58,9 +73,13 @@ export function useWithdrawals() {
       const { data } = await api.post(`/withdrawals/${withdrawalId}/approve`, { approved })
       return data
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      // Invalidate broadly since we don't always know the groupId here
       queryClient.invalidateQueries({ queryKey: ['groups'] })
       queryClient.invalidateQueries({ queryKey: ['pending-withdrawals'] })
+      queryClient.invalidateQueries({ queryKey: ['group-ledger'] })
+      queryClient.invalidateQueries({ queryKey: ['audit'] })
+      queryClient.invalidateQueries({ queryKey: ['group'] })
     },
   })
 

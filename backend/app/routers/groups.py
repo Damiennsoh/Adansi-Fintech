@@ -210,6 +210,7 @@ async def get_group_ledger(group_id: UUID, current_user: User = Depends(get_curr
             "reference": c.transaction_ref,
             "created_at": c.created_at,
             "member_name": m_name,
+            "is_guest": bool(c.meta_data.get("guest")) if c.meta_data else False,
             "contribution_frequency": c.meta_data.get("contribution_frequency") if c.meta_data else None
         })
     

@@ -128,6 +128,9 @@ export function useGroupDetail(groupId) {
     queryKey: ['group-ledger', groupId],
     queryFn: async () => (await api.get(`/groups/${groupId}/ledger`)).data,
     enabled: !!groupId,
+    staleTime: 0,
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: true,
   })
 
   const archiveMember = useMutation({
