@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Plus, Bell, TrendingUp, Wallet, Eye, EyeOff, ShieldCheck } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
 import { useGroups } from '../hooks/useGroups'
 import { useUserProfile } from '../hooks/useAuth'
 import { useCredit } from '../hooks/useContributions'
@@ -9,6 +10,7 @@ import GroupCard from '../components/GroupCard'
 import TransactionItem from '../components/TransactionItem'
 import CreditScoreRing from '../components/CreditScoreRing'
 import { formatCurrency } from '../lib/utils'
+import api from '../lib/api'
 
 export default function DashboardPage() {
   const { groups, isLoading } = useGroups()
@@ -18,8 +20,16 @@ export default function DashboardPage() {
 
   useRealtimeNotifications(profile?.id)
 
+  const { data: historyData } = useQuery({
+    queryKey: ['recentTransactions'],
+    queryFn: async () => {
+      const { data } = await api.get('/users/me/history')
+      return data.contributions || []
+    },
+  })
+
   const totalBalance = groups.reduce((sum, g) => sum + (g.balance ?? g.current_balance ?? 0), 0)
-  const recentTransactions = groups.flatMap(g => g.recent_transactions || []).slice(0, 5)
+  const recentTransactions = (historyData || []).slice(0, 5)
   const score = creditProfile?.score ?? creditProfile?.credit_score ?? profile?.credit_score ?? 0
   const loanEligibleAmount = creditProfile?.max_loan_amount ?? creditProfile?.loan_eligibility ?? 0
   const unreadCount = profile?.unread_notifications ?? 0
@@ -27,6 +37,7 @@ export default function DashboardPage() {
   const userGreeting = profile?.full_name
     ? profile.full_name.split(' ')[0]
     : 'Member'
+
 
   return (
     <div className="min-h-screen bg-gray-50 pb-20">

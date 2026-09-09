@@ -24,11 +24,11 @@ export default function TransactionItem({ transaction }) {
       </div>
 
       <div className="flex-1 min-w-0">
-        <p className="font-medium text-gray-900 truncate">
-          {isContribution ? 'Contribution' : 'Withdrawal'}
+        <p className="font-semibold text-gray-900 text-sm truncate">
+          {transaction.group_name ? `${transaction.group_name}` : (isContribution ? 'Contribution' : 'Withdrawal')}
         </p>
         <p className="text-xs text-gray-500">
-          {transaction.member_name || transaction.user_name || transaction.user || 'Member'} • {formatRelativeTime(transaction.created_at || transaction.date)}
+          {isContribution ? 'Deposit' : 'Withdrawal'} • {formatRelativeTime(transaction.created_at || transaction.date)}
         </p>
       </div>
 
