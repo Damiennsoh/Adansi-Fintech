@@ -5,6 +5,7 @@ from decimal import Decimal
 from typing import Optional
 from uuid import UUID
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Withdrawal, Group, GroupMember, User, Transaction, AuditEvent
@@ -40,16 +41,16 @@ def detect_network(phone: str) -> str:
 
 def calculate_required_approvals(group: Group) -> int:
     """Return how many approvals are needed based on group approval_rule."""
-    treasurers = [m for m in group.members if m.role in ("admin", "treasurer", "creator")]
-    members = group.members
+    members_list = getattr(group, "members", None) or []
+    treasurers = [m for m in members_list if m.role in ("admin", "treasurer", "creator")]
     rule = group.approval_rule or "any_1_treasurer"
 
     if rule == "two_of_three_treasurers":
         return min(2, max(1, len(treasurers)))
     if rule == "majority_members":
-        return max(2, int(len(members) * 0.51))
+        return max(2, int(len(members_list) * 0.51))
     if rule == "unanimous_members":
-        return max(1, len(members))
+        return max(1, len(members_list))
     return 1
 
 
@@ -126,12 +127,17 @@ async def execute_disbursement(
         )
     )
 
+    members_query = await db.execute(
+        select(GroupMember.user_id).where(GroupMember.group_id == group.id)
+    )
+    member_user_ids = members_query.scalars().all()
+
     await db.commit()
 
     beneficiary_label = withdrawal.beneficiary_name or withdrawal.beneficiary_phone
-    for member in group.members:
-        user = await db.get(User, member.user_id)
-        if user:
+    for user_id in member_user_ids:
+        user = await db.get(User, user_id)
+        if user and user.phone:
             await notification_service.send_withdrawal_completed(
                 phone=user.phone,
                 amount=float(withdrawal.amount),

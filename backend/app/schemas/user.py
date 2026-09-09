@@ -18,6 +18,7 @@ class UserProfileResponse(BaseModel):
     credit_score: int
     total_contributed: Decimal
     groups_count: int
+    unread_notifications: int = 0
     created_at: datetime
 
 
@@ -47,3 +48,17 @@ class NotificationResponse(BaseModel):
     content: str
     status: str
     created_at: datetime
+
+
+class GhanaCardSubmitRequest(BaseModel):
+    ghana_card_number: str = Field(..., pattern=r"^GHA-[0-9]{9}-[0-9]{1}$")
+
+
+class NotificationPreferencesRequest(BaseModel):
+    whatsapp_enabled: bool = True
+    sms_enabled: bool = True
+    push_enabled: bool = True
+    contributions_alert: bool = True
+    withdrawals_alert: bool = True
+    loans_alert: bool = True
+

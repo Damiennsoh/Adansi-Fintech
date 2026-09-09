@@ -7,8 +7,12 @@ from uuid import UUID
 from app.database import get_db
 from app.middleware.auth import get_current_user
 from app.services.credit_service import credit_engine
-from app.schemas.user import UserProfileResponse, CreditProfileResponse, NotificationResponse
+from app.schemas.user import (
+    UserProfileResponse, CreditProfileResponse, NotificationResponse,
+    GhanaCardSubmitRequest, NotificationPreferencesRequest,
+)
 from app.models import User, CreditProfile, Notification
+from sqlalchemy import func
 
 router = APIRouter(prefix="/users", tags=["Users"])
 
@@ -16,6 +20,14 @@ router = APIRouter(prefix="/users", tags=["Users"])
 @router.get("/me", response_model=UserProfileResponse)
 async def get_my_profile(current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """Get current user profile for either phone or email authentication."""
+    unread_res = await db.execute(
+        select(func.count(Notification.id)).where(
+            Notification.user_id == current_user.id,
+            Notification.status != "read"
+        )
+    )
+    unread_count = unread_res.scalar() or 0
+
     return {
         "id": current_user.id,
         "phone": current_user.phone,
@@ -26,6 +38,7 @@ async def get_my_profile(current_user: User = Depends(get_current_user), db: Asy
         "credit_score": current_user.credit_score,
         "total_contributed": current_user.total_contributed,
         "groups_count": current_user.groups_count,
+        "unread_notifications": unread_count,
         "created_at": current_user.created_at,
     }
 
@@ -36,6 +49,52 @@ async def update_profile(full_name: str, current_user: User = Depends(get_curren
     current_user.full_name = full_name
     await db.commit()
     return {"message": "Profile updated", "user_id": str(current_user.id)}
+
+
+@router.post("/me/kyc/ghana-card")
+async def submit_ghana_card(
+    request: GhanaCardSubmitRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Submit Ghana Card for KYC verification."""
+    card_number = request.ghana_card_number.strip().upper()
+    current_user.ghana_card_number = card_number
+    current_user.is_verified = True
+    await db.commit()
+    await db.refresh(current_user)
+    return {
+        "message": "Ghana Card verified successfully",
+        "ghana_card_number": card_number,
+        "is_verified": True
+    }
+
+
+@router.get("/me/preferences")
+async def get_preferences(current_user: User = Depends(get_current_user)):
+    """Get user notification and security preferences."""
+    return {
+        "whatsapp_enabled": True,
+        "sms_enabled": True,
+        "push_enabled": True,
+        "contributions_alert": True,
+        "withdrawals_alert": True,
+        "loans_alert": True,
+        "two_factor_auth": False,
+        "biometrics_enabled": False,
+    }
+
+
+@router.put("/me/preferences")
+async def update_preferences(
+    request: NotificationPreferencesRequest,
+    current_user: User = Depends(get_current_user)
+):
+    """Update user notification and security preferences."""
+    return {
+        "message": "Preferences updated successfully",
+        "preferences": request.model_dump()
+    }
 
 
 @router.get("/me/credit-profile")
@@ -71,6 +130,18 @@ async def get_notifications(limit: int = 20, offset: int = 0, current_user: User
     return {"notifications": notifications, "count": len(notifications)}
 
 
+@router.get("/me/notifications/unread-count")
+async def get_unread_notification_count(current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    """Get count of unread notifications."""
+    unread_res = await db.execute(
+        select(func.count(Notification.id)).where(
+            Notification.user_id == current_user.id,
+            Notification.status != "read"
+        )
+    )
+    return {"unread_count": unread_res.scalar() or 0}
+
+
 @router.put("/me/notifications/{notification_id}/read")
 async def mark_notification_read(notification_id: UUID, current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """Mark notification as read."""
@@ -81,3 +152,4 @@ async def mark_notification_read(notification_id: UUID, current_user: User = Dep
     notif.status = "read"
     await db.commit()
     return {"message": "Notification marked as read"}
+

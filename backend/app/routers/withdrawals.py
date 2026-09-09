@@ -42,7 +42,13 @@ async def request_withdrawal(
     if role not in ["admin", "treasurer", "creator"]:
         raise HTTPException(status_code=403, detail="Only treasurers can request withdrawals")
 
-    group = await db.get(Group, request.group_id)
+    group_stmt = (
+        select(Group)
+        .options(selectinload(Group.members))
+        .where(Group.id == request.group_id)
+    )
+    group_res = await db.execute(group_stmt)
+    group = group_res.scalar_one_or_none()
     if not group:
         raise HTTPException(status_code=404, detail="Group not found")
 
@@ -112,20 +118,27 @@ async def request_withdrawal(
         expires_at=withdrawal_expires_at(group),
     )
     db.add(withdrawal)
+
+    # Collect recipient user IDs before session commit expires relationship objects
+    notify_user_ids = [
+        member.user_id
+        for member in (group.members or [])
+        if member.user_id != current_user.id and member.role in ("admin", "treasurer", "creator")
+    ]
+
     await db.commit()
     await db.refresh(withdrawal)
 
-    for member in group.members:
-        if member.user_id != current_user.id and member.role in ("admin", "treasurer", "creator"):
-            user = await db.get(User, member.user_id)
-            if user:
-                await notification_service.send_withdrawal_request(
-                    phone=user.phone,
-                    requester_name=current_user.full_name,
-                    amount=float(request.amount),
-                    group_name=group.name,
-                    withdrawal_id=str(withdrawal.id)[:8]
-                )
+    for user_id in notify_user_ids:
+        user = await db.get(User, user_id)
+        if user and user.phone:
+            await notification_service.send_withdrawal_request(
+                phone=user.phone,
+                requester_name=current_user.full_name or "Member",
+                amount=float(request.amount),
+                group_name=group.name,
+                withdrawal_id=str(withdrawal.id)[:8]
+            )
 
     return {
         "message": "Withdrawal request submitted",
@@ -256,7 +269,10 @@ async def approve_withdrawal(
     if current_user.id == withdrawal.requested_by:
         raise HTTPException(status_code=403, detail="The requester cannot approve their own withdrawal")
 
-    group = await db.get(Group, withdrawal.group_id)
+    group_stmt = select(Group).options(selectinload(Group.members)).where(Group.id == withdrawal.group_id)
+    group = (await db.execute(group_stmt)).scalar_one_or_none()
+    if not group:
+        raise HTTPException(status_code=404, detail="Group not found")
     rule = group.approval_rule or "any_1_treasurer"
     if rule in ("any_1_treasurer", "two_of_three_treasurers"):
         if member.role not in ("admin", "treasurer", "creator"):
@@ -390,7 +406,11 @@ async def disburse_withdrawal(
     if withdrawal.status not in ["approved", "verified"]:
         raise HTTPException(status_code=400, detail=f"Withdrawal status is {withdrawal.status}, cannot disburse")
 
-    group = await db.get(Group, withdrawal.group_id)
+    group_stmt = select(Group).options(selectinload(Group.members)).where(Group.id == withdrawal.group_id)
+    group = (await db.execute(group_stmt)).scalar_one_or_none()
+    if not group:
+        raise HTTPException(status_code=404, detail="Group not found")
+
     result = await execute_disbursement(withdrawal, group, current_user.id, db)
 
     if not result["success"]:

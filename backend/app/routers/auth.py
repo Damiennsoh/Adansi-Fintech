@@ -12,7 +12,8 @@ from app.services.redis_service import redis_service
 from app.schemas.auth import (
     UserRegisterRequest, UserLoginRequest, OtpVerifyRequest,
     TokenResponse, PinResetRequest, PinResetConfirmRequest,
-    GhanaCardVerifyRequest, PinSetupRequest, RefreshTokenRequest
+    GhanaCardVerifyRequest, PinSetupRequest, RefreshTokenRequest,
+    ChangePinRequest
 )
 from app.models import User
 
@@ -323,9 +324,29 @@ async def reset_pin(request: PinResetConfirmRequest, db: AsyncSession = Depends(
     return {"message": "PIN reset successful. Please login with your new PIN."}
 
 
+@router.post("/change-pin")
+async def change_pin(
+    request: ChangePinRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Change current user's PIN after validating their existing PIN."""
+    if not current_user.pin_hash or not auth_service.verify_pin(request.current_pin, current_user.pin_hash):
+        raise HTTPException(status_code=400, detail="Current PIN is incorrect")
+
+    if request.current_pin == request.new_pin:
+        raise HTTPException(status_code=400, detail="New PIN cannot be the same as your current PIN")
+
+    current_user.pin_hash = auth_service.hash_pin(request.new_pin)
+    await db.commit()
+
+    return {"message": "PIN changed successfully", "success": True}
+
+
 @router.post("/verify-ghana-card")
 async def verify_ghana_card(request: GhanaCardVerifyRequest, db: AsyncSession = Depends(get_db)):
     """Upload and verify Ghana Card for KYC."""
     # TODO: Decode base64 image, upload to Supabase Storage
     # For MVP: store the number, mark as pending verification
     return {"message": "Ghana Card submitted for verification. This may take 24-48 hours."}
+

@@ -91,3 +91,9 @@ class GhanaCardVerifyRequest(BaseModel):
 
 class RefreshTokenRequest(BaseModel):
     refresh_token: str
+
+
+class ChangePinRequest(BaseModel):
+    current_pin: str = Field(..., min_length=4, max_length=6, pattern=r"^\d{4,6}$")
+    new_pin: str = Field(..., min_length=4, max_length=6, pattern=r"^\d{4,6}$")
+
