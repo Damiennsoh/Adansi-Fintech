@@ -169,14 +169,19 @@ export default function DashboardPage() {
 
         {/* Recent Activity */}
         <div>
-          <h2 className="font-bold text-gray-900 mb-4">Recent Activity</h2>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="font-bold text-gray-900">Recent Activity</h2>
+            <Link to="/history" className="text-sm text-adansi-primary font-medium hover:underline">
+              See All
+            </Link>
+          </div>
           <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
             {recentTransactions.length === 0 ? (
               <p className="text-center text-gray-500 py-4 text-sm">No recent transactions</p>
             ) : (
               <div className="divide-y divide-gray-100">
-                {recentTransactions.map((tx, i) => (
-                  <TransactionItem key={i} transaction={tx} />
+                {recentTransactions.slice(0, 5).map((tx, i) => (
+                  <TransactionItem key={tx.id || i} transaction={tx} />
                 ))}
               </div>
             )}

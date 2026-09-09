@@ -20,10 +20,12 @@ export function useContributions() {
       const groupId = variables.groupId
       queryClient.invalidateQueries({ queryKey: ['group', groupId] })
       queryClient.invalidateQueries({ queryKey: ['transactions', groupId] })
-      // Critically: invalidate the ledger so it reflects the new contribution immediately
       queryClient.invalidateQueries({ queryKey: ['group-ledger', groupId] })
       queryClient.invalidateQueries({ queryKey: ['audit', groupId] })
       queryClient.invalidateQueries({ queryKey: ['groups'] })
+      queryClient.invalidateQueries({ queryKey: ['recentTransactions'] })
+      queryClient.invalidateQueries({ queryKey: ['historyTransactions'] })
+      queryClient.invalidateQueries({ queryKey: ['historySummary'] })
     },
   })
 
@@ -62,9 +64,11 @@ export function useWithdrawals() {
       const groupId = variables.groupId
       queryClient.invalidateQueries({ queryKey: ['group', groupId] })
       queryClient.invalidateQueries({ queryKey: ['pending-withdrawals', groupId] })
-      // Invalidate ledger so disbursed withdrawals appear immediately
       queryClient.invalidateQueries({ queryKey: ['group-ledger', groupId] })
       queryClient.invalidateQueries({ queryKey: ['audit', groupId] })
+      queryClient.invalidateQueries({ queryKey: ['recentTransactions'] })
+      queryClient.invalidateQueries({ queryKey: ['historyTransactions'] })
+      queryClient.invalidateQueries({ queryKey: ['historySummary'] })
     },
   })
 
@@ -74,12 +78,14 @@ export function useWithdrawals() {
       return data
     },
     onSuccess: (data) => {
-      // Invalidate broadly since we don't always know the groupId here
       queryClient.invalidateQueries({ queryKey: ['groups'] })
       queryClient.invalidateQueries({ queryKey: ['pending-withdrawals'] })
       queryClient.invalidateQueries({ queryKey: ['group-ledger'] })
       queryClient.invalidateQueries({ queryKey: ['audit'] })
       queryClient.invalidateQueries({ queryKey: ['group'] })
+      queryClient.invalidateQueries({ queryKey: ['recentTransactions'] })
+      queryClient.invalidateQueries({ queryKey: ['historyTransactions'] })
+      queryClient.invalidateQueries({ queryKey: ['historySummary'] })
     },
   })
 
