@@ -55,6 +55,12 @@ export default defineConfig({
   server: {
     port: 5173,
     host: true,
-    allowedHosts: ['localhost', '127.0.0.1', '.vercel.run']
-  }
+    allowedHosts: ['localhost', '127.0.0.1', '.vercel.run'],
+    proxy: {
+      '/api': {
+        target: process.env.BACKEND_INTERNAL_URL || 'http://localhost:8000',
+        changeOrigin: true,
+      },
+    },
+  },
 })

@@ -78,12 +78,18 @@ App available at: <http://localhost:5173>
 ## Local Dev with Docker Compose
 
 ```bash
-# From the adansi/ root:
-docker compose up
+# From the Adansi repo root:
+docker compose up --build
 ```
 
-This starts both services together (backend on :8000, frontend on :5173).  
-Ensure your `.env` files are populated before running.
+This starts both containers on the shared `adansi` network:
+
+| Service | Container | URL |
+|---|---|---|
+| Backend (FastAPI) | `adansi-backend` | http://localhost:8000 (`/docs`, `/health`) |
+| Frontend (Vite) | `adansi-frontend` | http://localhost:5173 |
+
+The frontend proxies `/api` to `http://backend:8000` inside Docker, so the browser only needs the frontend origin. Optional `backend/.env` and `frontend/.env` are loaded when present; copy from each folder's `.env.example`.
 
 ---
 

@@ -1,9 +1,4 @@
-version: "3.9"
-
 services:
-  # ─────────────────────────────────────────
-  # FastAPI Backend
-  # ─────────────────────────────────────────
   backend:
     build:
       context: ./backend
@@ -11,24 +6,27 @@ services:
     container_name: adansi-backend
     ports:
       - "8000:8000"
-    environment:
-      - PORT=8000
     env_file:
-      - ./backend/.env
+      - path: ./backend/.env
+        required: false
+    environment:
+      PORT: "8000"
+      FRONTEND_URL: http://localhost:5173
+      FRONTEND_URLS: http://localhost:5173,http://127.0.0.1:5173,http://frontend:5173
+      API_PUBLIC_URL: http://localhost:8000
     volumes:
       - ./backend:/app
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    networks:
+      - adansi
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 10s
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
 
-  # ─────────────────────────────────────────
-  # Vite + React Frontend (dev server)
-  # ─────────────────────────────────────────
   frontend:
     build:
       context: ./frontend
@@ -37,11 +35,25 @@ services:
     ports:
       - "5173:5173"
     env_file:
-      - ./frontend/.env
+      - path: ./frontend/.env
+        required: false
+    environment:
+      BACKEND_INTERNAL_URL: http://backend:8000
+      VITE_API_URL: /api/v1
     volumes:
       - ./frontend:/app
-      - /app/node_modules        # preserve installed modules
-    command: npm run dev -- --host 0.0.0.0
+      - frontend_node_modules:/app/node_modules
+    command: npm run dev -- --host 0.0.0.0 --port 5173
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
+    networks:
+      - adansi
     restart: unless-stopped
+
+networks:
+  adansi:
+    driver: bridge
+
+volumes:
+  frontend_node_modules:
