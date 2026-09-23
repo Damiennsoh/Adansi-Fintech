@@ -168,7 +168,7 @@ class GroupResponse(BaseModel):
     type: str
     purpose: Optional[str]
     target_amount: Optional[Decimal]
-    current_balance: Decimal
+    current_balance: Decimal = Decimal("0")
     status: str
     withdrawal_threshold: Decimal
     agent_verification_required: bool = False
@@ -180,6 +180,13 @@ class GroupResponse(BaseModel):
     rotation_enabled: bool = False
     created_at: datetime
     members: List[GroupMemberResponse] = []
+
+    @field_validator("current_balance", "withdrawal_threshold", mode="before")
+    @classmethod
+    def normalize_decimal(cls, value):
+        if value in (None, ""):
+            return Decimal("0")
+        return Decimal(str(value))
 
     @field_validator("agent_verification_required", "rotation_enabled", mode="before")
     @classmethod
@@ -213,9 +220,16 @@ class GroupListResponse(BaseModel):
     name: str
     code: str
     type: str
-    current_balance: Decimal
+    current_balance: Decimal = Decimal("0")
     my_role: str
     member_count: int
+
+    @field_validator("current_balance", mode="before")
+    @classmethod
+    def normalize_decimal(cls, value):
+        if value in (None, ""):
+            return Decimal("0")
+        return Decimal(str(value))
 
 
 class GroupSearchResponse(BaseModel):
@@ -227,6 +241,13 @@ class GroupSearchResponse(BaseModel):
     type: str
     current_balance: Decimal = Decimal("0")
     member_count: int = 0
+
+    @field_validator("current_balance", mode="before")
+    @classmethod
+    def normalize_decimal(cls, value):
+        if value in (None, ""):
+            return Decimal("0")
+        return Decimal(str(value))
 
 
 class JoinGroupRequest(BaseModel):

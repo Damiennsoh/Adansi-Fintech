@@ -1,12 +1,14 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api from '../lib/api'
 import { useGroupStore } from '../store/groupStore'
+import { toNumber } from '../lib/utils'
 
 function normalizeGroup(g) {
   if (!g) return g
   return {
     ...g,
-    balance: g.balance ?? g.current_balance ?? 0,
+    balance: toNumber(g.balance ?? g.current_balance),
+    current_balance: toNumber(g.current_balance ?? g.balance),
     member_count: g.member_count ?? g.members?.length ?? 0,
   }
 }
@@ -30,8 +32,15 @@ export function useGroups() {
       const { data } = await api.post('/groups', groupData)
       return normalizeGroup(data)
     },
-    onSuccess: () => {
+    onSuccess: (created) => {
+      queryClient.setQueryData(['groups'], (current = []) => {
+        const exists = current.some((group) => String(group.id) === String(created?.id))
+        return exists ? current : [created, ...current]
+      })
       queryClient.invalidateQueries({ queryKey: ['groups'] })
+      queryClient.invalidateQueries({ queryKey: ['userProfile'] })
+      queryClient.invalidateQueries({ queryKey: ['notifications'] })
+      queryClient.invalidateQueries({ queryKey: ['recentTransactions'] })
     },
   })
 

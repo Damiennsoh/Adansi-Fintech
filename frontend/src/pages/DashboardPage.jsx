@@ -9,7 +9,7 @@ import { useRealtimeNotifications } from '../hooks/useRealtime'
 import GroupCard from '../components/GroupCard'
 import TransactionItem from '../components/TransactionItem'
 import CreditScoreRing from '../components/CreditScoreRing'
-import { formatCurrency } from '../lib/utils'
+import { formatCurrency, toNumber } from '../lib/utils'
 import api from '../lib/api'
 
 export default function DashboardPage() {
@@ -28,7 +28,7 @@ export default function DashboardPage() {
     },
   })
 
-  const totalBalance = groups.reduce((sum, g) => sum + (g.balance ?? g.current_balance ?? 0), 0)
+  const totalBalance = groups.reduce((sum, g) => sum + toNumber(g.balance ?? g.current_balance), 0)
   const recentTransactions = (historyData || []).slice(0, 5)
   const score = creditProfile?.score ?? creditProfile?.credit_score ?? profile?.credit_score ?? 0
   const loanEligibleAmount = creditProfile?.max_loan_amount ?? creditProfile?.loan_eligibility ?? 0

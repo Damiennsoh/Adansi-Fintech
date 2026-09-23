@@ -62,6 +62,7 @@ class GroupService:
                 join_type=join_type,
                 rotation_enabled=rotation_enabled,
                 rotation_queue=rotation_queue or [],
+                current_balance=Decimal("0"),
             )
             session.add(group)
             await session.flush()

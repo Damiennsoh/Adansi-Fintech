@@ -2,12 +2,18 @@ export function cn(...classes) {
   return classes.filter(Boolean).join(' ');
 }
 
+export function toNumber(value, fallback = 0) {
+  if (value == null || value === '' || value === undefined) return fallback
+  const n = typeof value === 'number' ? value : parseFloat(String(value).replace(/,/g, ''))
+  return Number.isFinite(n) ? n : fallback
+}
+
 export function formatCurrency(amount, currency = 'GHS') {
   return new Intl.NumberFormat('en-GH', {
     style: 'currency',
     currency,
     minimumFractionDigits: 2,
-  }).format(amount);
+  }).format(toNumber(amount));
 }
 
 export function formatDate(dateString) {

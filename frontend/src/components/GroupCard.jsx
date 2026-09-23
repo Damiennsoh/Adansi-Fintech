@@ -1,6 +1,6 @@
 import { Users, ArrowUpRight } from 'lucide-react'
 import { Link } from 'react-router-dom'
-import { formatCurrency, formatGroupType, getGroupColor } from '../lib/utils'
+import { formatCurrency, formatGroupType, getGroupColor, toNumber } from '../lib/utils'
 
 export default function GroupCard({ group }) {
   return (
@@ -31,7 +31,7 @@ export default function GroupCard({ group }) {
       <div className="mt-4 flex items-center justify-between">
         <div>
           <p className="text-xs text-gray-500">Balance</p>
-          <p className="text-lg font-bold text-gray-900">{formatCurrency(group.balance || 0)}</p>
+          <p className="text-lg font-bold text-gray-900">{formatCurrency(group.balance)}</p>
         </div>
         <div className="flex items-center gap-1 text-gray-500">
           <Users className="w-4 h-4" />
@@ -39,18 +39,18 @@ export default function GroupCard({ group }) {
         </div>
       </div>
 
-      {group.target_amount > 0 && (
+      {toNumber(group.target_amount) > 0 && (
         <div className="mt-3">
           <div className="flex justify-between text-xs mb-1">
             <span className="text-gray-500">Progress</span>
             <span className="font-medium">
-              {Math.round(((group.balance || 0) / group.target_amount) * 100)}%
+              {Math.round((toNumber(group.balance) / toNumber(group.target_amount, 1)) * 100)}%
             </span>
           </div>
           <div className="w-full bg-gray-100 rounded-full h-2">
             <div
               className="bg-adansi-primary rounded-full h-2 transition-all"
-              style={{ width: `${Math.min(((group.balance || 0) / group.target_amount) * 100, 100)}%` }}
+              style={{ width: `${Math.min((toNumber(group.balance) / toNumber(group.target_amount, 1)) * 100, 100)}%` }}
             />
           </div>
         </div>

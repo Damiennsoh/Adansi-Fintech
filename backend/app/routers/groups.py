@@ -15,7 +15,7 @@ from app.schemas.group import (
     GroupCreateRequest, GroupUpdateRequest, GroupResponse, GroupListResponse,
     JoinGroupRequest, InviteMemberRequest
 )
-from app.models import Group, GroupMember, User, Contribution, Withdrawal, AuditEvent, JoinRequest
+from app.models import Group, GroupMember, User, Contribution, Withdrawal, AuditEvent, JoinRequest, Notification
 
 router = APIRouter(prefix="/groups", tags=["Groups"])
 
@@ -44,6 +44,17 @@ async def create_group(
         rotation_enabled=request.rotation_enabled,
         rotation_queue=request.rotation_queue,
     )
+    
+    # Create notification for group creation
+    db.add(Notification(
+        user_id=current_user.id,
+        channel="push",
+        type="group_created",
+        content=f"You successfully created the group '{group.name}' with code {group.code}.",
+        status="pending"
+    ))
+    await db.commit()
+    
     return group
 
 

@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useGroups } from '../hooks/useGroups'
-import { ArrowLeft, Users, Target, Calendar, Copy, CheckCircle2 } from 'lucide-react'
+import { ArrowLeft, Users, Target, Calendar, Copy, CheckCircle2, Loader2 } from 'lucide-react'
+import { useToastStore } from '../store/toastStore'
 
 const groupTypes = [
   { key: 'funeral', label: 'Funeral', desc: 'Funeral contributions & expenses', color: 'bg-purple-500' },
@@ -16,6 +17,7 @@ const groupTypes = [
 export default function CreateGroupPage() {
   const navigate = useNavigate()
   const { createGroup } = useGroups()
+  const showToast = useToastStore((state) => state.showToast)
   const [form, setForm] = useState({
     name: '',
     type: 'savings',
@@ -57,9 +59,10 @@ export default function CreateGroupPage() {
       }
       const data = await createGroup.mutateAsync(payload)
       setCreatedGroup(data)
+      showToast(`Group successfully created${data?.name ? `: ${data.name}` : ''}.`)
     } catch (error) {
       const detail = error?.response?.data?.detail || 'The group could not be created. Please check your details and try again.'
-      alert(detail)
+      showToast(typeof detail === 'string' ? detail : 'The group could not be created. Please try again.', 'error')
     }
   }
 
